@@ -7,16 +7,21 @@
 //!   exécute les tours l'un après l'autre : une session n'est jamais reprise deux fois ;
 //! - un **bail d'hébergement** (`owners`) : un seul process héberge un agent.
 //!
+//! En option (mode agent), un **pont HTTP** (`bridge/`) compatible avec l'`overmind-bridge`
+//! Node (`/send`, `/reset`, `/status`, `/health`) met ses demandes dans la même file.
+//!
 //! Rien d'autre n'est gardé en RAM : la conversation reste dans la session du CLI
 //! (`--resume`), relancé une fois par tour.
 
 mod activity;
+mod bridge;
 mod control;
 mod ctx;
 mod host;
 mod inbox;
 mod info;
 mod mcp;
+mod reset;
 mod server;
 mod start;
 mod status;
@@ -26,5 +31,6 @@ mod turn;
 mod waiting;
 mod worker;
 
-pub use start::start;
+pub use bridge::open as open_bridge;
+pub use start::{start, start_on};
 pub use stop::stop;

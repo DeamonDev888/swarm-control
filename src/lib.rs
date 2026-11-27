@@ -51,4 +51,4 @@ mod state;
 mod store;
 mod tools;
 
-pub use cli::run;
+pub use cli::{run, serve_agent};

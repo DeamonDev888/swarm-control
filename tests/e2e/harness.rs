@@ -77,8 +77,13 @@ pub fn start_sharing_with_args(
 
 /// Commande `swarm-control` avec l'environnement isolé du harnais.
 pub fn command(root: &Path, ws: &Path, hermes_home: &Path) -> Command {
+    command_for(Path::new(env!("CARGO_BIN_EXE_swarm-control")), root, ws, hermes_home)
+}
+
+/// Comme [`command`], pour un autre exécutable (le binaire copié sous le nom d'un agent).
+fn command_for(exe: &Path, root: &Path, ws: &Path, hermes_home: &Path) -> Command {
     let cli = fake_cli();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_swarm-control"));
+    let mut cmd = Command::new(exe);
     cmd.args(["--port", "0", "--workspace"])
         .arg(ws)
         .env("USERPROFILE", root)
@@ -110,20 +115,55 @@ fn launch(
         cmd.env(k, v);
     }
     let mut child = cmd.spawn().expect("lancement du serveur");
-    let mut reader = BufReader::new(child.stderr.take().unwrap());
-    let port = read_port(&mut reader);
-    // Vide stderr en arrière-plan pour que le serveur ne bloque jamais dessus.
-    std::thread::spawn(move || {
-        let mut sink = Vec::new();
-        let _ = reader.read_to_end(&mut sink);
-    });
+    let banner = read_banner(&mut child);
+    let port = port_after(&banner, MCP_MARK).expect("port MCP dans la bannière");
     Harness { child, port, root, ws, hermes_home, owns_root }
 }
 
-/// Port du serveur d'administration, lu dans sa bannière (`… MCP sur http://127.0.0.1:PORT/mcp …`).
-/// Les lignes « agent résident … → http://… » qui la précèdent ne sont pas la bannière.
-fn read_port(reader: &mut impl BufRead) -> u16 {
-    const MARK: &str = "MCP sur http://127.0.0.1:";
+/// Un process en **mode agent** (un seul agent, sans serveur d'administration).
+pub struct AgentProcess {
+    child: Child,
+    /// Port du serveur MCP de l'agent (`ask` / `status` / `stop`).
+    pub port: u16,
+    /// Port du pont HTTP compatible `overmind-bridge`, si `--bridge` a été passé.
+    pub bridge: Option<u16>,
+}
+
+impl Drop for AgentProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Copie le binaire sous le nom `agent` (dans le dossier du harnais) et rend son chemin.
+pub fn agent_exe(h: &Harness, agent: &str) -> PathBuf {
+    let dir = h.root.join("bin");
+    std::fs::create_dir_all(&dir).unwrap();
+    let name = if cfg!(windows) { format!("{agent}.exe") } else { agent.to_string() };
+    let path = dir.join(name);
+    std::fs::copy(env!("CARGO_BIN_EXE_swarm-control"), &path).unwrap();
+    path
+}
+
+/// Lance `exe` en mode agent sur le workspace de `h`, avec `args` (ex. `--bridge 0`).
+pub fn start_agent(h: &Harness, exe: &Path, args: &[&str]) -> AgentProcess {
+    let mut cmd = command_for(exe, &h.root, &h.ws, &h.hermes_home);
+    cmd.args(args).stdout(Stdio::null()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().expect("lancement de l'agent");
+    let banner = read_banner(&mut child);
+    let port = port_after(&banner, MCP_MARK).expect("port MCP dans la bannière");
+    AgentProcess { child, port, bridge: port_after(&banner, BRIDGE_MARK) }
+}
+
+const MCP_MARK: &str = "MCP sur http://127.0.0.1:";
+const BRIDGE_MARK: &str = "pont HTTP sur http://127.0.0.1:";
+
+/// Lit la bannière (`… MCP sur http://127.0.0.1:PORT/mcp …`) puis vide stderr en arrière-plan
+/// pour que le serveur ne bloque jamais dessus. Les lignes « agent résident … → http://… »
+/// qui la précèdent ne sont pas la bannière.
+fn read_banner(child: &mut Child) -> String {
+    let mut reader = BufReader::new(child.stderr.take().unwrap());
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut line = String::new();
     while Instant::now() < deadline {
@@ -131,9 +171,18 @@ fn read_port(reader: &mut impl BufRead) -> u16 {
         if reader.read_line(&mut line).unwrap_or(0) == 0 {
             break;
         }
-        if let Some(rest) = line.split(MARK).nth(1) {
-            return rest.split('/').next().unwrap().parse().unwrap();
+        if line.contains(MCP_MARK) {
+            std::thread::spawn(move || {
+                let mut sink = Vec::new();
+                let _ = reader.read_to_end(&mut sink);
+            });
+            return line;
         }
     }
-    panic!("le serveur n'a pas annoncé son port");
+    panic!("le serveur n'a pas annoncé son port (dernière ligne : {line})");
+}
+
+fn port_after(banner: &str, mark: &str) -> Option<u16> {
+    let rest = banner.split(mark).nth(1)?;
+    rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok()
 }

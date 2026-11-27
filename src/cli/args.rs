@@ -11,6 +11,11 @@ pub struct Options {
     pub residents: Vec<String>,
     /// Numéro d'instance (`--instance N`) ; `None` = premier libre.
     pub instance: Option<u32>,
+    /// Mode agent (`--agent NAME`, ou exécutable nommé d'après l'agent) : ce process ne sert
+    /// que cet agent, sans serveur d'administration.
+    pub agent: Option<String>,
+    /// Port du pont HTTP compatible `overmind-bridge` (`--bridge N`, mode agent seulement).
+    pub bridge: Option<u16>,
 }
 
 pub enum Parsed {
@@ -26,6 +31,8 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
         workspace: None,
         residents: Vec::new(),
         instance: None,
+        agent: None,
+        bridge: None,
     };
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -47,6 +54,8 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
                         .ok_or("--instance: entier ≥ 1 attendu")?,
                 );
             }
+            "--agent" | "-a" => options.agent = Some(value(&mut args, "--agent")?),
+            "--bridge" | "-b" => options.bridge = Some(parse_port(&value(&mut args, "--bridge")?)?),
             "--help" | "-h" => return Ok(Parsed::Help),
             "--version" | "-V" => return Ok(Parsed::Version),
             other => return Err(format!("option inconnue: {other} (voir --help)")),
@@ -60,7 +69,7 @@ fn value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, 
 }
 
 fn parse_port(raw: &str) -> Result<u16, String> {
-    raw.parse().map_err(|_| "--port: nombre 0-65535 attendu".to_string())
+    raw.parse().map_err(|_| format!("port: nombre 0-65535 attendu (reçu « {raw} »)"))
 }
 
 /// `alice,bob` → `["alice", "bob"]` (vides ignorés).
@@ -98,6 +107,16 @@ mod tests {
             panic!("serve attendu")
         };
         assert_eq!(o.residents, ["alice", "bob", "carol"]);
+    }
+
+    #[test]
+    fn reads_agent_mode_and_bridge() {
+        let Ok(Parsed::Serve(o)) = run(&["--agent", "sniper", "-b", "3001"]) else {
+            panic!("serve attendu")
+        };
+        assert_eq!((o.agent.as_deref(), o.bridge), (Some("sniper"), Some(3001)));
+        assert!(run(&["--bridge", "x"]).is_err());
+        assert!(run(&["--agent"]).is_err());
     }
 
     #[test]

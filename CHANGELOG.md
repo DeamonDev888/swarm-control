@@ -7,6 +7,19 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ## [Unreleased]
 
+### Ajouté
+- **Un exécutable par agent** : le binaire copié sous le nom d'un agent (`sniper`, `sniper.exe`),
+  ou lancé avec `--agent NAME`, ne sert que cet agent (serveur MCP `swarm-<agent>`, file,
+  session), sans serveur d'administration. `--port` fixe le port de son serveur MCP.
+  `swarm_control::serve_agent("nom")` sert de `main` à un crate d'agent.
+- **Pont HTTP compatible `overmind-bridge`** (`--bridge N`, mode agent) : `POST /send`
+  (contexte `[DISCORD CONTEXT]`, réponse `{result, session_id}`, vide si l'agent a posté via
+  MCP), `POST /reset`, `GET /status`, `GET /health` — un routeur Discord Node existant n'a qu'à
+  changer de port. Les demandes passent par la file de l'agent.
+
+### Corrigé
+- Test `control` instable : l'état disque d'un run tué est attendu au lieu d'être lu aussitôt.
+
 ## [0.1.1] - 2026-11-27
 
 ### Ajouté

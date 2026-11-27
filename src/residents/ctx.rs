@@ -20,6 +20,9 @@ pub struct Ctx {
     pub(super) current: Mutex<Option<Current>>,
     pub(super) last: Mutex<Option<Last>>,
     pub(super) turns_done: AtomicU64,
+    /// Reset demandé pendant un tour : la session sera oubliée à sa fin (sinon le tour la
+    /// réécrirait en se terminant).
+    pub(super) reset_after_turn: AtomicBool,
 }
 
 impl Ctx {
@@ -35,6 +38,7 @@ impl Ctx {
             current: Mutex::new(None),
             last: Mutex::new(None),
             turns_done: AtomicU64::new(0),
+            reset_after_turn: AtomicBool::new(false),
         }
     }
 

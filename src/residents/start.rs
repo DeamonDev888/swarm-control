@@ -14,6 +14,17 @@ static TOKEN_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Rend `agent` résident dans ce process : bail d'hébergement, serveur MCP, file et fil de travail.
 pub fn start(ws: &Path, runner: Runner, agent: &str) -> Result<HostInfo, String> {
+    start_on(ws, runner, agent, None)
+}
+
+/// Comme [`start`], avec l'adresse d'écoute du serveur de l'agent (`host:port`) ; `None` =
+/// premier port libre de 23080..=23099.
+pub fn start_on(
+    ws: &Path,
+    runner: Runner,
+    agent: &str,
+    listen: Option<&str>,
+) -> Result<HostInfo, String> {
     agents::validate_name(agent)?;
     if !agents::exists_for(ws, agent, runner) {
         return Err(format!("Agent '{agent}' introuvable pour le runner {}.", runner.as_str()));
@@ -25,7 +36,7 @@ pub fn start(ws: &Path, runner: Runner, agent: &str) -> Result<HostInfo, String>
         .map_err(|busy| hosted_error(busy, agent))?;
 
     let ctx = Arc::new(Ctx::new(agent, runner, ws.to_path_buf(), owners::instance_name()));
-    let (bound, handle) = server::bind(&ctx)?;
+    let (bound, handle) = server::bind(&ctx, listen)?;
     let addr = bound.local_addr().map_err(|e| format!("adresse du serveur illisible: {e}"))?;
     let url = format!("http://{addr}/mcp");
     ctx.set_url(url.clone());

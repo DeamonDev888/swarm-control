@@ -101,6 +101,25 @@ Le serveur d'`alice` expose trois outils :
 - **Instances numérotées** : chaque `swarm-control` prend le premier numéro libre (`swarm-control-1`, `-2`…, ou `--instance N`), s'annonce sous ce nom et le porte comme hôte de ses agents. Un numéro pris est refusé.
 - **Routage** : `run_agent` / `run_agents_parallel` d'un agent résident sont **transmis à son hôte** (`ask`, quelle que soit l'instance qui reçoit l'appel) ; la réponse porte `routedTo`. Reste **local, à la demande** : agent sans hôte, hôte injoignable, `background:true`, ou run qui impose `sessionId`, `path`, `provider` ou `autoResume:false`.
 
+## Un exécutable par agent
+
+Copiez le binaire sous le nom d'un agent : lancé ainsi, il ne sert **que cet agent** (son serveur MCP `swarm-<agent>`, sa file, sa session), sans serveur d'administration.
+
+```bash
+cp swarm-control sniper            # Windows : copy swarm-control.exe sniper.exe
+./sniper --port 23090 --bridge 3001 --workspace ~/.swarm-control
+# swarm-sniper 0.2.0 — MCP sur http://127.0.0.1:23090/mcp  (agent: sniper, runner: hermes, …) · pont HTTP sur http://127.0.0.1:3001
+```
+
+- `--agent NAME` fait la même chose sans renommer (pratique dans une unit systemd) ; depuis un crate à vous : `fn main() -> ExitCode { swarm_control::serve_agent("sniper") }`.
+- **`--bridge N`** ouvre un pont HTTP compatible avec l'`overmind-bridge` Node (worker Discord) : un routeur existant n'a qu'à changer de port.
+
+| Route | Rôle |
+|---|---|
+| `POST /send` | `{message, userId, username, channelId}` → l'agent reçoit le bloc `[DISCORD CONTEXT]` habituel → `{result, session_id}` (`result` vide si l'agent a déjà posté sur Discord via MCP) |
+| `POST /reset` | oublie la session : le prochain message repart à neuf (sûr même pendant un tour) |
+| `GET /status` · `GET /health` | état de l'agent · sonde de vie |
+
 ## Comment un agent reste persistant
 
 1. **Définition sur disque** : un prompt (persona) + une config, créés une fois.
@@ -168,9 +187,9 @@ Le code est découpé en petits fichiers classés par couche : voir [docs/ARCHIT
 
 ## Feuille de route
 
-> À venir — **non implémenté dans la 0.1.0**. Aujourd'hui, seuls Hermes et Claude Code sont pilotés. Déjà fait : les [agents résidents](#agents-résidents) (serveur MCP propre, file, `ask`, annonce), leur exclusivité entre instances, les **instances numérotées** (`swarm-control-N`) et le **routage** de `run_agent` vers l'hôte de l'agent.
+> À venir — **pas encore implémenté**. Aujourd'hui, seuls Hermes et Claude Code sont pilotés. Déjà fait : les [agents résidents](#agents-résidents) (serveur MCP propre, file, `ask`, annonce), leur exclusivité entre instances, les **instances numérotées** (`swarm-control-N`), le **routage** de `run_agent` vers l'hôte de l'agent et [**un exécutable par agent**](#un-exécutable-par-agent) avec son pont HTTP.
 
-- **Un agent = 1 profil + 1 exécutable** : chaque agent créé a son profil et son exécutable, servi en MCP dans son propre processus ; plusieurs agents peuvent aussi partager un exécutable.
+- **Un profil par agent** : un dossier de profil propre à chaque exécutable d'agent (aujourd'hui : le workspace partagé).
 - **Des pairs qui se trouvent tout seuls** : les `swarm-*` du registre de LiteMCP sont découverts et injectés dans la configuration MCP de chaque agent, dont le modèle les appelle comme des outils (`ask` existe déjà, ainsi que le refus des cycles ; l'injection reste à faire).
 - **Plus de runners** : Antigravity, opencode, Kilo, Cline, OpenClaw (grokbot : dès que sa commande est connue), puis tout CLI décrit sans recompiler.
 - **CLI complète** : sous-commandes (`serve`, `agents`, `run`, `runs`, `doctor`…), introduction en ASCII, affichage de tout ce que fait le serveur.

@@ -2,6 +2,7 @@
 //! éphémère avec un workspace jetable, et un faux CLI (`examples/fake_cli`) à
 //! la place de `claude` / `hermes`. Aucun appel réseau, aucun jeton réel.
 
+mod agent_mode;
 mod claude_resilience;
 mod claude_sessions;
 mod configs;

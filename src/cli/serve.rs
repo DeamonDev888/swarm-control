@@ -6,6 +6,15 @@ use std::path::Path;
 use std::process::ExitCode;
 
 pub fn start(options: Options) -> ExitCode {
+    if options.agent.is_some() {
+        return super::agent::start(options);
+    }
+    if options.bridge.is_some() {
+        eprintln!(
+            "swarm-control: --bridge sert un seul agent : ajoute --agent NAME (ou renomme              l'exécutable d'après l'agent)"
+        );
+        return ExitCode::from(2);
+    }
     let number = match instance::claim(options.instance) {
         Ok(n) => n,
         Err(e) => {

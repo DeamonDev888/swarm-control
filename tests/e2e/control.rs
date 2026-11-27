@@ -41,8 +41,16 @@ fn background_run_can_be_listed_and_killed() {
     let killed = ok(&h, "agent_control", json!({"action": "kill", "runId": run_id}));
     assert_eq!(killed["killed"], true);
     assert_eq!(killed["run"]["status"], "killed");
-    assert_eq!(last_run(&h.ws, "claude", "carl")["status"], "failed");
-    assert!(!lease_file(&h.ws, "claude", "carl").exists(), "bail non libéré après kill");
+    // Le run tué écrit son état et libère son bail en se terminant, juste après `kill`.
+    assert!(
+        crate::resident::eventually(5, || last_run(&h.ws, "claude", "carl")["status"] == "failed"),
+        "état disque : {}",
+        last_run(&h.ws, "claude", "carl")
+    );
+    assert!(
+        crate::resident::eventually(5, || !lease_file(&h.ws, "claude", "carl").exists()),
+        "bail non libéré après kill"
+    );
 
     // Agent libre de nouveau.
     ok(&h, "run_agent", json!({"runner": "claude", "agentName": "carl", "prompt": "après"}));

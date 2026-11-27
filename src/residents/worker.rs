@@ -37,6 +37,7 @@ fn run_turn(ctx: &Ctx, turn: Turn) {
     ctx.begin_turn(turn.from.clone(), &live.run_id);
     let started = Instant::now();
     let result = runners::execute(&req, &live, None);
+    ctx.apply_pending_reset();
     let took = started.elapsed();
     ctx.end_turn(&result, took);
     turn.complete(result, queued_ms, took.as_millis() as u64);
