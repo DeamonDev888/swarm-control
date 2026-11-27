@@ -80,6 +80,34 @@ Exemples de spécialisations que tu peux créer avec `create_agent` et orchestre
   </tr>
 </table>
 
+### Classe « Persistant uniquement » (Discord, WhatsApp & Custom)
+
+Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà de **Discord** (`--bridge` HTTP & MCP) et **WhatsApp**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
+
+<div align="center">
+  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp et Custom" width="880" />
+</div>
+
+<table align="center">
+  <tr>
+    <td align="center" width="210">
+      <img src="assets/classes/hornet-pixel-discord.svg" width="82" alt="Hornet Discord" /><br />
+      <strong>Hornet Discord</strong><br />
+      <sub>Persistant · Bridge &amp; MCP</sub>
+    </td>
+    <td align="center" width="210">
+      <img src="assets/classes/hornet-pixel-whatsapp.svg" width="82" alt="Hornet WhatsApp" /><br />
+      <strong>Hornet WhatsApp</strong><br />
+      <sub>Persistant · Session 24/7</sub>
+    </td>
+    <td align="center" width="210">
+      <img src="assets/classes/hornet-pixel-custom.svg" width="82" alt="Hornet Custom" /><br />
+      <strong>Hornet Customisable</strong><br />
+      <sub>Prêt pour tout bridge CLI &amp; MCP</sub>
+    </td>
+  </tr>
+</table>
+
 ## Démarrage rapide
 
 ```bash
@@ -102,22 +130,23 @@ Puis, depuis le client :
 create_agent(name:"architecte", runner:"claude", prompt:"Tu es un architecte logiciel…")
 run_agent(runner:"claude", agentName:"architecte", prompt:"Propose un plan d'API")   # session créée
 run_agent(runner:"claude", agentName:"architecte", prompt:"Détaille l'étape 2")      # session reprise
+run_agent(runner:"claude", prompt:"Question ponctuelle")   # agent ÉPHÉMÈRE : un tour, rien de sauvegardé
 ```
 
 ## Les 10 outils
 
 | Outil | Rôle |
 |---|---|
-| `run_agent` | Lance un agent. Avec `agentName` : reprise de session automatique. `background:true` rend un `runId`. |
+| `run_agent` | Lance un agent. Avec `agentName` : reprise de session automatique. **Sans `agentName` : agent éphémère** — un tour, aucune session gardée. `background:true` rend un `runId`. |
 | `run_agents_parallel` | Jusqu'à 10 agents en parallèle, runners mélangeables ; `waitAll:false` rend la main au premier succès. |
 | `agent_control` | `status` · `stream` (sortie en direct) · `wait` · `kill` · `list`. |
 | `agent_start` | Rend un agent **résident** : serveur MCP propre (`swarm-<agent>`), file de demandes, fil de travail. Rend son URL. |
 | `agent_stop` | Arrête un agent résident : tour tué, file vidée, serveur fermé, annonce retirée. |
-| `create_agent` | Claude : prompt + settings + MCP. Hermes : profil natif + `SOUL.md` (`cloneFrom` pour réutiliser les clés d'un profil). `resident:true` l'héberge aussitôt. |
+| `create_agent` | Claude : prompt + settings + MCP. Hermes : profil natif + `SOUL.md` (`cloneFrom` pour réutiliser les clés d'un profil). `resident:true` l'héberge aussitôt. `executable:true` copie le binaire courant en `<workspace>/bin/<agent>` ; `unit:true` (Linux) écrit en plus une unit systemd `--headless`, non activée. |
 | `list_agents` | Agents Claude et Hermes, état de session, run en cours, et l'URL de leur hôte s'ils sont résidents. |
 | `get_agent_configs` | Fichiers d'un agent, **secrets masqués**. |
 | `update_agent_config` | Modèle, serveurs MCP, variables, prompt — ou réécriture d'un fichier. |
-| `delete_agent` | Supprime l'agent et sa session ; refusé s'il tourne. |
+| `delete_agent` | Supprime l'agent et sa session, plus son exécutable et son unité dédiés s'ils existent ; refusé s'il tourne. |
 
 ## Agents résidents
 
@@ -161,6 +190,12 @@ cp swarm-control sniper            # Windows : copy swarm-control.exe sniper.exe
 | `POST /reset` | oublie la session : le prochain message repart à neuf (sûr même pendant un tour) |
 | `GET /status` · `GET /health` | état de l'agent · sonde de vie |
 
+### L'exécutable et l'unité créés par `create_agent`
+
+`create_agent(…, executable:true)` copie le binaire courant (`std::env::current_exe`) dans `<workspace>/bin/<agent>` (`.exe` sous Windows) et rend son chemin dans la réponse. Chaque agent reçoit **sa propre copie**, nommée d'après lui : un fichier `bin/<agent>` n'est référencé que par cet agent, donc `delete_agent` le retire sans vérification de références croisées — il ne peut pas y en avoir. Plusieurs agents peuvent partager *le même binaire d'origine* (leurs copies proviennent du même exécutable), jamais le même fichier.
+
+`create_agent(…, executable:true, unit:true)` écrit en plus une unit systemd `<workspace>/bridge/units/swarm-<agent>.service` — `ExecStart=<chemin> --headless --workspace <ws>`, redémarrage sur échec — **écrite, jamais activée** : rien n'est installé en `/etc`, rien ne démarre au boot tant que vous n'avez pas exécuté le `installHint` renvoyé par l'outil (`sudo cp … /etc/systemd/system/ && sudo systemctl enable --now swarm-<agent>`). Option **Linux uniquement** : ailleurs elle est refusée avec une erreur claire (« non supporté ici ») qui dit ce qui a quand même été créé (l'agent et sa copie du binaire restent en place).
+
 ## Comment un agent reste persistant
 
 1. **Définition sur disque** : un prompt (persona) + une config, créés une fois.
@@ -168,6 +203,8 @@ cp swarm-control sniper            # Windows : copy swarm-control.exe sniper.exe
 3. **Registre de processus** : PID, statut et sortie en mémoire ; PID et statut du dernier run dans le même fichier d'état, pour le retrouver après redémarrage ou depuis une autre instance.
 4. **Un seul run vivant par agent — même entre plusieurs instances** : chaque run détient un **bail** sur disque (`bridge/owners/`, créé de façon exclusive, renouvelé toutes les 30 s, repris s'il est périmé). Deux reprises simultanées corrompraient la session : la seconde est refusée (`AGENT_BUSY`), qu'elle vienne du même process ou d'un autre `swarm-control` sur le même workspace.
 5. **Secours** : jetons de repli Claude sur 401 / 429 / 5xx ; session périmée → relance à neuf.
+
+Les définitions d'un agent vivent dans **son dossier de profil** `<workspace>/agents/<nom>/` (Claude : `.claude/…` ; Antigravity : `.antigravity/…` ; Hermes : ses profils natifs, déjà individuels) au lieu du workspace partagé. Les agents créés avant restent lus, modifiables et supprimables à leur ancien emplacement : un constructeur de chemin vise le profil dédié dès qu'il existe, sinon l'emplacement historique tant qu'il existe, sinon le profil dédié (créations). `list_agents`, `run_agent`, `update_agent_config` et `delete_agent` suivent automatiquement.
 
 Les agents Claude (`.claude/`) et Hermes (profils) sont ceux de l'ancien OverMind TS : vos agents existants fonctionnent tels quels, et leurs sessions déjà enregistrées dans `bridge/agents.json` sont reprises.
 
@@ -228,9 +265,8 @@ Le code est découpé en petits fichiers classés par couche : voir [docs/ARCHIT
 
 ## Feuille de route
 
-> À venir — **pas encore implémenté**. Aujourd'hui, seuls Hermes et Claude Code sont pilotés. Déjà fait : les [agents résidents](#agents-résidents) (serveur MCP propre, file, `ask`, annonce), leur exclusivité entre instances, les **instances numérotées** (`swarm-control-N`), le **routage** de `run_agent` vers l'hôte de l'agent et [**un exécutable par agent**](#un-exécutable-par-agent) avec son pont HTTP.
+> À venir — **pas encore implémenté**. Aujourd'hui, Hermes, Claude Code et Antigravity sont pilotés. Déjà fait : les [agents résidents](#agents-résidents) (serveur MCP propre, file, `ask`, annonce), leur exclusivité entre instances, les **instances numérotées** (`swarm-control-N`), le **routage** de `run_agent` vers l'hôte de l'agent, [**un exécutable par agent**](#un-exécutable-par-agent) avec son pont HTTP, et le [dossier de profil par agent](#comment-un-agent-reste-persistant) (`executable`/`unit` de `create_agent` compris).
 
-- **Un profil par agent** : un dossier de profil propre à chaque exécutable d'agent (aujourd'hui : le workspace partagé).
 - **Des pairs qui se trouvent tout seuls** : les `swarm-*` du registre de LiteMCP sont découverts et injectés dans la configuration MCP de chaque agent, dont le modèle les appelle comme des outils (`ask` existe déjà, ainsi que le refus des cycles ; l'injection reste à faire).
 - **Plus de runners** : Antigravity, opencode, Kilo, Cline, OpenClaw (grokbot : dès que sa commande est connue), puis tout CLI décrit sans recompiler.
 - **CLI complète** : sous-commandes (`serve`, `agents`, `run`, `runs`, `doctor`…), introduction en ASCII, affichage de tout ce que fait le serveur.
