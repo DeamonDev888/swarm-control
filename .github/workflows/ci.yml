@@ -94,6 +94,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Syntaxe des scripts
         run: for f in scripts/*.sh; do bash -n "$f"; done
+      - name: Encodage markdown (anti double-encodage UTF-8)
+        run: bash scripts/check-encoding.sh
       - name: Cohérence des versions (Cargo.toml ↔ Cargo.lock ↔ CHANGELOG)
         run: bash scripts/release-check.sh
 

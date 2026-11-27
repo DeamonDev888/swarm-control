@@ -9,6 +9,9 @@ cd "$(dirname "$0")/.."
 
 step() { printf '\n==> %s\n' "$*"; }
 
+step "encodage markdown (anti double-encodage UTF-8)"
+scripts/check-encoding.sh
+
 step "format"
 cargo fmt --all -- --check
 
