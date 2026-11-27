@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="880" />
+<img src="assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="100%" />
 
 <br />
 
@@ -42,7 +42,7 @@ Lancer `claude -p` ou `hermes chat` à la main perd tout entre deux appels. `swa
 Exemples de spécialisations que tu peux créer avec `create_agent` et orchestrer en parallèle via `run_agents_parallel` :
 
 <div align="center">
-  <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — Bus MCP multi-agents en direct" width="880" />
+  <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — Bus MCP multi-agents en direct" width="100%" />
 </div>
 
 ### Agents persistants uniquement (Discord, WhatsApp, X, Google & Custom)
@@ -50,7 +50,7 @@ Exemples de spécialisations que tu peux créer avec `create_agent` et orchestre
 Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà des connecteurs **Discord** (`--bridge` HTTP & MCP), **WhatsApp**, **X** et **Google (Gmail & Calendar)**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
 
 <div align="center">
-  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp, X, Google et Custom" width="880" />
+  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp, X, Google et Custom" width="100%" />
 </div>
 
 ## Démarrage rapide
