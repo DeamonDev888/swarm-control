@@ -1,0 +1,131 @@
+name: CI
+
+# Tout push vers main et TOUTE pull request. Lecture seule : aucun secret.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Un seul run actif par ref : un nouveau push annule le run supplanté.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # 1. Lint : format, clippy strict, documentation stricte.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions épinglées par SHA de commit : un tag peut être déplacé, un SHA non.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Doc (rustdoc strict)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --locked
+
+  # 2. Compilation + tests sur les trois systèmes : le serveur lance des
+  #    processus et tue des arbres de processus, dont la sémantique diffère.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Build
+        run: cargo build --all-targets --locked
+      - name: Tests (unitaires + bout en bout)
+        run: cargo test --locked
+
+  # 3. MSRV déclaré dans Cargo.toml (rust-version = "1.85").
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@ccc8c1f930153b792217f06c65a38f23a882993a # 1.85
+      - name: Check MSRV
+        # RUSTUP_TOOLCHAIN prime sur rust-toolchain.toml (qui vise « stable »).
+        env:
+          RUSTUP_TOOLCHAIN: "1.85"
+        run: cargo check --all-targets --locked
+
+  # 4. Le paquet crates.io se construit depuis son archive (contenu + build).
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Paquet
+        run: cargo package --locked
+
+  # 5. Advisories RustSec, licences, sources.
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: taiki-e/install-action@98b24ef8830c90613ec3b57343df3abde2b66e56 # cargo-deny
+        with:
+          tool: cargo-deny
+      - name: cargo-deny
+        run: cargo deny check
+
+  # 6. Scripts de release : mêmes garde-fous que le pipeline, sans publier.
+  release-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntaxe des scripts
+        run: for f in scripts/*.sh; do bash -n "$f"; done
+      - name: Cohérence des versions (Cargo.toml ↔ Cargo.lock ↔ CHANGELOG)
+        run: bash scripts/release-check.sh
+
+  # 7. Garde-fou d'attribution : aucun trailer `Co-Authored-By: Claude …` dans
+  #    les nouveaux commits (le motif est ancré en début de ligne : un trailer,
+  #    pas une simple mention en prose).
+  attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Aucun trailer d'attribution IA
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="origin/${{ github.base_ref }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            commits="$(git rev-list -n 1 HEAD)"
+          else
+            commits="$(git rev-list "$base"..HEAD)"
+          fi
+          if [ -z "$commits" ]; then
+            echo "aucun commit nouveau à vérifier"
+            exit 0
+          fi
+          if git log --format=%B $commits | grep -Eai '^[[:space:]]*co-authored-by:.*(claude|anthropic)|^[[:space:]]*claude-session:'; then
+            echo "::error::attribution IA détectée dans un message de commit (voir ci-dessus)"
+            exit 1
+          fi
+          echo "aucune attribution IA dans $(printf '%s\n' "$commits" | wc -l) commit(s)"

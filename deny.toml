@@ -1,0 +1,21 @@
+# cargo-deny : advisories RustSec, licences, sources.
+# Lancé par la CI (`cargo deny check`) et par scripts/verify.sh s'il est installé.
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Liste minimale : celles réellement présentes dans l'arbre de dépendances.
+# Une nouvelle dépendance sous une autre licence fait échouer la CI : à décider.
+allow = ["MIT", "Apache-2.0", "Unicode-3.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,200 @@
+# Release — pipeline canonique de publication d'une version.
+#
+# Déclenché par un tag `vX.Y.Z` (ou à la main, pour republier : voir docs/RELEASE.md).
+# Quatre jobs séquentiels ; chacun court-circuite le suivant :
+#   1. `verify`         — cohérence des versions (tag ↔ Cargo.toml ↔ Cargo.lock ↔ CHANGELOG)
+#                         PUIS gate qualité : fmt, clippy strict, tests, doc, paquet, cargo-deny ;
+#   2. `publish`        — crates.io, IDEMPOTENT (200/404/autre distingués) ;
+#                         jeton : secret `CARGO_REGISTRY_TOKEN`, sinon OIDC (trusted publishing) ;
+#   3. `github-release` — release GitHub, corps extrait de la section `## [X.Y.Z]` du CHANGELOG ;
+#   4. `binaries`       — binaires Linux / macOS / Windows + SHA-256 joints à la release.
+#
+# L'ordre est voulu : la release GitHub n'existe QUE si le crate est publié (une
+# publication crates.io est irréversible, une release GitHub se corrige).
+# Seuls `publish` (id-token) et `github-release` / `binaries` (contents: write)
+# élèvent leurs permissions ; tout le reste est en lecture seule.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version à publier (ex. 0.1.0) — vide : le tag courant, sinon Cargo.toml'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Les runs de publication sont sérialisés ; avec l'idempotence, cela écarte toute
+# publication en double d'une même version.
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Vérifier (cohérence des versions + gate qualité)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.coherence.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: taiki-e/install-action@98b24ef8830c90613ec3b57343df3abde2b66e56 # cargo-deny
+        with:
+          tool: cargo-deny
+
+      # Cohérence AVANT le gate lourd : un tag incohérent échoue en secondes.
+      - name: Cohérence des versions (tag/input ↔ Cargo.toml ↔ Cargo.lock ↔ CHANGELOG)
+        id: coherence
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          V=$(bash scripts/release-check.sh "$VERSION_INPUT" | sed -n 's/^version=//p' | tail -1)
+          if [ -z "$V" ]; then
+            echo "cohérence non résolue — abandon avant tout test et toute publication"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "version à publier : $V"
+
+      - name: Gate qualité (fmt, clippy, tests, doc, paquet, cargo-deny)
+        run: bash scripts/verify.sh
+
+  publish:
+    name: Publier sur crates.io
+    needs: verify
+    runs-on: ubuntu-latest
+    # `id-token: write` sert uniquement à l'échange OIDC crates.io (jeton
+    # éphémère) et reste confiné à CE job.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # Voie 1 : le secret `CARGO_REGISTRY_TOKEN` s'il existe.
+      # Voie 2 : trusted publishing crates.io (OIDC) quand il est absent.
+      HAS_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      # Ce job est le seul à écrire sur crates.io : il revalide lui-même la
+      # cohérence, sans dépendre de l'ordre des jobs ni d'un output recopié.
+      - name: Cohérence des versions avant publication
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: bash scripts/release-check.sh "$VERSION_INPUT" >/dev/null
+
+      - name: Jeton crates.io par OIDC (aucun secret configuré)
+        id: auth
+        if: env.HAS_REGISTRY_TOKEN != 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+
+      - name: Publier (idempotent, erreurs réseau non masquées)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ env.HAS_REGISTRY_TOKEN == 'true' && secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+        run: bash scripts/publish.sh "${{ needs.verify.outputs.version }}"
+
+  github-release:
+    name: Release GitHub
+    # Uniquement sur un push de tag : un dispatch manuel vérifie et publie, mais
+    # ne crée pas de release (pas de tag à rattacher).
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Extraire le corps depuis le CHANGELOG
+        id: corps
+        run: |
+          set -euo pipefail
+          V="${GITHUB_REF_NAME#v}"
+          FICHIER=$(mktemp)
+          # Section `## [X.Y.Z]` (préfixe exact, le `]` évite 0.1 vs 0.1.1)
+          # jusqu'au prochain titre `## `.
+          if awk -v cible="## [$V]" \
+            'index($0, cible) == 1 {dans=1; next} dans && /^## / {exit} dans {print}' \
+            CHANGELOG.md > "$FICHIER" && [ -s "$FICHIER" ]; then
+            echo "section CHANGELOG trouvée pour [$V]"
+          else
+            echo "section [$V] absente du CHANGELOG.md — corps de repli" >&2
+            printf 'Version %s — voir [CHANGELOG.md](https://github.com/%s/blob/main/CHANGELOG.md).\n' \
+              "$V" "$GITHUB_REPOSITORY" > "$FICHIER"
+          fi
+          echo "path=$FICHIER" >> "$GITHUB_OUTPUT"
+
+      - name: Créer la release GitHub
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: swarm-control ${{ github.ref_name }}
+          body_path: ${{ steps.corps.outputs.path }}
+          draft: false
+          prerelease: ${{ contains(needs.verify.outputs.version, '-') }}
+
+  binaries:
+    name: Binaire (${{ matrix.os }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [verify, github-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Compiler (release)
+        run: cargo build --release --locked
+
+      - name: Empaqueter + somme SHA-256
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET=$(rustc -vV | sed -n 's/^host: //p')
+          NAME="swarm-control-${GITHUB_REF_NAME}-${TARGET}"
+          mkdir "$NAME"
+          cp LICENSE-MIT LICENSE-APACHE README.md CHANGELOG.md "$NAME/"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp target/release/swarm-control.exe "$NAME/"
+            7z a -tzip "$NAME.zip" "$NAME" >/dev/null
+            ARCHIVE="$NAME.zip"
+          else
+            cp target/release/swarm-control "$NAME/"
+            tar -czf "$NAME.tar.gz" "$NAME"
+            ARCHIVE="$NAME.tar.gz"
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+          fi
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Joindre à la release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            ${{ steps.pack.outputs.archive }}
+            ${{ steps.pack.outputs.archive }}.sha256

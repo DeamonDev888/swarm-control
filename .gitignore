@@ -1,2 +1,13 @@
+# Build
 /target
+
+# Secrets locaux
 .env
+.env.*
+
+# Éditeurs et OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
