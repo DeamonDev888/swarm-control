@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="880" />
+<img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="880" />
 
 <br />
 
@@ -39,7 +39,7 @@ Il fonctionne avec les outils d'IA en ligne de commande que vous avez déjà :
 **Claude Code** (`claude`), **Hermes** (`hermes`) et **Antigravity** (`agy`). D'autres arrivent (opencode, Kilo, Cline, OpenClaw…).
 
 <div align="center">
-  <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — plusieurs agents qui travaillent en parallèle" width="880" />
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-live-strip.svg" alt="swarm-control — plusieurs agents qui travaillent en parallèle" width="880" />
 </div>
 
 ### Les mots à connaître
@@ -209,7 +209,7 @@ Les raccourcis à une lettre ne marchent que quand le champ de message est vide.
 ### Agent permanent (serveur, bot Discord…)
 
 <div align="center">
-  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — agents persistants Discord, WhatsApp, X, Google et personnalisés" width="880" />
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — agents persistants Discord, WhatsApp, X, Google et personnalisés" width="880" />
 </div>
 
 ```bash
@@ -429,20 +429,6 @@ Le serveur MCP, la validation des arguments (JSON Schema) et l'annonce des agent
 [**LiteMCP**](https://github.com/DeamonDev888/litemcp) ([crates.io](https://crates.io/crates/litemcp) · [docs.rs](https://docs.rs/litemcp)),
 une bibliothèque Rust MCP légère et synchrone (Streamable HTTP, spec `2026-07-28`). Sa latence est mesurée dans son dépôt.
 
-<details>
-<summary><b>Face aux autres projets</b></summary>
-
-Recherche GitHub du 2026-11-26, non exhaustive, d'après la description publique de chaque projet.
-
-| Projet | Forme | Notre angle |
-|---|---|---|
-| [agent-of-empires](https://github.com/agent-of-empires/agent-of-empires) | plusieurs agents Claude Code / OpenCode depuis une TUI ou le web | un **serveur MCP** : un agent pilote d'autres agents comme un outil |
-| [cas](https://github.com/codingagentsystem/cas) | orchestration multi-agent pour Claude Code, mémoire, tâches | le cœur seul (persistance + orchestration), sans base de données |
-| [hcom](https://github.com/aannoo/hcom), [amux](https://github.com/mixpeek/amux) | agents qui se parlent / plan de contrôle | sessions reprises par agent nommé, runs suivis et tuables |
-| [cersei](https://github.com/pacifio/cersei), [swarms-rs](https://github.com/The-Swarm-Corporation/swarms-rs) | frameworks Rust pour *écrire* des agents | on **orchestre des CLI existants** |
-| [Puppetmaster](https://github.com/professorpalmer/Puppetmaster) | plan de contrôle Python, état durable | Rust, MCP natif, quelques Mio |
-</details>
-
 ## Feuille de route
 
 Déjà là : Claude Code, Hermes et Antigravity · sessions persistantes · agents résidents · un exécutable par agent ·
@@ -468,5 +454,5 @@ MIT ou Apache-2.0, au choix.
 
 <div align="center">
   <br />
-  <img src="assets/pixel/hornet-pixel-logo.svg" alt="Logo swarm-control : un frelon cybernétique animé" width="128" />
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/hornet-pixel-logo.svg" alt="Logo swarm-control : un frelon cybernétique animé" width="128" />
 </div>

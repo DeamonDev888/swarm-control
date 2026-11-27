@@ -3,13 +3,15 @@
 > **Étapes 1 à 3 construites** (état par agent, bail inter-process, agents résidents : serveur
 > propre, file, `ask` / `status` / `stop`, annonce ; instances numérotées `swarm-control-N` et
 > routage des runs vers l'hôte — voir §3 et §7), et le **mode agent** construit lui aussi :
-> exécutable par agent et pont HTTP `--bridge` (§4, `main` 4a2d1cf). **Restent des propositions,
-> non construites** : les pairs automatiques et le champ `executable` de `create_agent`.
+> exécutable par agent et pont HTTP `--bridge` (§4, `main` 4a2d1cf). **Commités** (`efbe821`) : le champ `executable` de
+> `create_agent` (+ `unit`), le journal des tours et les outils `history` / `session` /
+> `logs` / `config`. **Dans l'arbre de travail** (non encore commités) : les pairs automatiques.
 > Décidée le 2026-11-26 : les agents
 > sont **résidents**, et l'architecture accepte **plusieurs instances**.
 > Les formats d'annonce (`litemcp-registry`) sont ceux de LiteMCP. Construits : `ask`, `status`,
 > `stop`, `agent_start`, `agent_stop`, `--instance`, le mode agent (`--agent` / binaire renommé,
-> `--port`, `serve_agent()`) et le pont `--bridge`. **À construire** : `peers`, le champ `executable`.
+> `--port`, `serve_agent()`) et le pont `--bridge`. **Dans l'arbre de travail** : les pairs
+> automatiques ; le champ `executable` et le journal sont commités (`efbe821`).
 
 ## 1. Trois objets
 
@@ -81,7 +83,7 @@ struct AgentHost {            // une entrée par agent résident, dans l'instanc
 ## 4. Le mode agent et son pont HTTP *(✅ construit — `main` 4a2d1cf)*
 
 Le même binaire, identifié par son **nom de fichier** ou par `--agent NAME`, ne sert qu'**un
-seul agent résident** : son serveur MCP (`swarm-<agent>`, outils `ask` / `status` / `stop`), sa
+seul agent résident** : son serveur MCP (`swarm-<agent>`, outils listés au §5), sa
 file, sa session — et **pas de serveur d'administration** (aucun des 10 outils). `--resident` y
 est refusé (un agent par process) ; `--port N` fixe le port d'écoute (défaut : premier libre de
 23080..=23099), sur le même `--host` que le MCP.
@@ -136,7 +138,7 @@ démarrage.
 ```
 ```json
 {"created":"alice","runner":"claude",
- "executable":"C:\\Users\\Deamon\\.swarm-control\\bin\\alice.exe",          // étape 4 : pas encore rendu
+ "executable":"C:\\Users\\Deamon\\.swarm-control\\bin\\alice.exe",   // rendu avec executable:true ; unit avec unit:true (Linux)
  "resident":{"instance":"swarm-control-1","name":"swarm-alice","url":"http://127.0.0.1:23082/mcp"}}
 ```
 
@@ -151,9 +153,20 @@ démarrage.
 | Outil | Rôle |
 |---|---|
 | `ask` | met un tour dans la file, rend la réponse |
-| `status` | file, tour en cours, session, PID |
-| `stop` | tue le tour en cours (arbre de processus) |
-| `peers` | les autres agents résidents vus dans le registre |
+| `status` | file, tour en cours, session, dernier tour |
+| `stop` | tue le tour en cours (arbre de processus ; vide la file si demandé) |
+| `history` | les derniers tours, lus dans le journal |
+| `session` | voir / oublier / forcer la session |
+| `logs` | fin de la sortie du dernier tour |
+| `config` | fichiers de configuration (secrets masqués) |
+
+Chaque tour est journalisé par le fil de travail dans
+`<workspace>/bridge/history/<runner>-<agent>.jsonl` (une ligne JSON par tour, rotation à
+5 Mio) ; le journal nourrit `history`, la CLI et la TUI. Ces quatre outils sont commités
+(`efbe821`), comme la CLI d'agent (`serve` par défaut, `ask`, `status`, `history`,
+`reset`, `config`, `schema <outil>` ; côté instance : `agents`, `run`, `runs`, `doctor`) et la TUI
+(feature `tui`, ratatui + crossterm) — voir PLAN §4.2
+et §4.3.
 
 ### `ask` (de bob vers alice)
 ```json
@@ -168,14 +181,18 @@ Refus d'un cycle (`bob → alice → bob`) :
 ```
 
 ### Les pairs, vus par le modèle
-Avant chaque tour, l'agent regénère son fichier MCP avec les pairs découverts :
+La configuration MCP de l'agent regroupe ses serveurs persistants et les pairs vivants du
+registre (`agents/peers`, réécrite au démarrage de la résidence et à chaque tour ; un serveur
+de l'utilisateur n'est jamais écrasé, trace dans `.swarm-peers.json`) :
 ```json
-{"mcpServers":{"swarm-bob":{"type":"http","url":"http://127.0.0.1:23083/mcp"},
-               "swarm-carol":{"type":"http","url":"http://127.0.0.1:23084/mcp"}}}
+{"mcpServers":{"bob":{"url":"http://127.0.0.1:23083/mcp"},
+               "carol":{"url":"http://127.0.0.1:23084/mcp"}}}
 ```
 Claude le reçoit par `--mcp-config` (déjà le cas pour ses serveurs) ; Hermes par `mcp_servers` de son
-`config.yaml` (déjà écrit par `agents/hermes/mcp.rs`). Son modèle appelle alors `swarm-bob.ask(…)`
-comme n'importe quel outil.
+`config.yaml` (déjà écrit par `agents/hermes/mcp.rs`) ; Antigravity par `.agents/mcp_config.json`
+du workspace. Son modèle appelle alors `bob.ask(…)` — la clé de serveur est le nom de l'agent,
+sans le préfixe `swarm-` de l'annonce (`peers/pairs` insère `peer.agent`) — comme n'importe quel
+outil.
 
 ## 6. Risques et questions ouvertes
 
@@ -202,8 +219,12 @@ comme n'importe quel outil.
    l'hôte, mode à la demande en repli. Testé de bout en bout : numéros distincts et annonces,
    numéro explicite déjà pris refusé, `run_agent` reçu par B exécuté par l'hôte A avec session
    partagée, cas qui restent locaux, tâches parallèles routées.
-4. *(✅ mode construit, §4)* **Exécutable par agent** : binaire renommé ou `--agent`,
-   `serve_agent()`, pont `--bridge` (construit dans `main`, 4a2d1cf). Reste à construire : la
-   fabrication par `create_agent {executable:true}` (copie dans `<workspace>/bin/`, chemin
-   rendu, `delete_agent` le retire).
-5. **Pairs** : découverte, injection dans la configuration MCP, anti-cycle.
+4. *(✅ mode construit, §4 ; fabrication commitée, `efbe821`)* **Exécutable par agent** :
+   binaire renommé ou `--agent`, `serve_agent()`, pont `--bridge` (construit dans `main`,
+   4a2d1cf). `create_agent {executable:true}` copie le binaire dans `<workspace>/bin/`, rend le
+   chemin, `delete_agent` le retire (testé) ; `unit:true` (Linux) écrit en plus une unit
+   systemd `--headless`, jamais activée (refusé hors Linux avant toute copie).
+5. *(✅ dans l'arbre de travail)* **Pairs** : découverte (`peers/discover`), section des pairs
+   vivants, triés par nom d'agent et fusionnés sans écraser les serveurs de l'utilisateur
+   (`peers/pairs`, testé), injection dans la configuration MCP de Claude, Hermes et
+   Antigravity (`agents/peers`), anti-cycle (testé à l'étape 2).
