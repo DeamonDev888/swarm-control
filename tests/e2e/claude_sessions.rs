@@ -13,9 +13,11 @@ fn claude_agent_persists_its_session() {
         json!({"name": "alice", "prompt": "Tu es Alice.", "model": "claude-sonnet-4-6"}),
     );
     assert_eq!(created["runner"], "claude");
-    assert!(h.ws.join(".claude/agents/alice.md").is_file());
-    assert!(h.ws.join(".claude/settings_alice.json").is_file());
-    assert!(h.ws.join(".claude/.mcp.alice.json").is_file());
+    // Profil dédié à l'agent (PLAN §4.4) : `<ws>/agents/alice/.claude/…`.
+    let profile = h.ws.join("agents").join("alice").join(".claude");
+    assert!(profile.join("agents/alice.md").is_file());
+    assert!(profile.join("settings_alice.json").is_file());
+    assert!(profile.join(".mcp.alice.json").is_file());
 
     // Doublon refusé.
     let (err, _) = call(&h, "create_agent", json!({"name": "alice", "prompt": "x"}));

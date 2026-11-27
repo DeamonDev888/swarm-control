@@ -100,7 +100,9 @@ fn decode(text: &str) -> Result<Value, CallError> {
     let payload = result
         .get("structuredContent")
         .cloned()
-        .unwrap_or_else(|| result["content"][0]["text"].clone());
+        .or_else(|| result["content"][0]["text"].as_str().map(|text| Value::String(text.into())))
+        // `tools/list` n'a ni l'un ni l'autre : le résultat *est* la charge utile.
+        .unwrap_or_else(|| result.clone());
     if result.get("isError").and_then(Value::as_bool).unwrap_or(false) {
         let message = payload.as_str().map_or_else(|| payload.to_string(), String::from);
         return Err(CallError::Tool(message));

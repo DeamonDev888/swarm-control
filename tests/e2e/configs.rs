@@ -20,7 +20,7 @@ fn mcp_update_regenerates_the_agent_file() {
     ok(&h, "create_agent", json!({"name": "p1", "prompt": "a"}));
     let up = ok(&h, "update_agent_config", json!({"name": "p1", "mcpServers": ["memory"]}));
     assert!(up["changes"].to_string().contains("memory"));
-    let path = h.ws.join(".claude/.mcp.p1.json");
+    let path = h.ws.join("agents").join("p1").join(".claude/.mcp.p1.json");
     let mcp: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     assert!(mcp["mcpServers"].get("memory").is_some());
     assert!(mcp["mcpServers"].get("db").is_none());

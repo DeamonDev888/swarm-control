@@ -89,9 +89,11 @@ pub fn duration(ms: u64) -> String {
     }
 }
 
-/// Une ligne : espaces compactés, tronquée à `max` caractères (ellipse comprise).
+/// Une ligne : espaces compactés, caractères de contrôle retirés (une réponse d'agent ne doit
+/// pas piloter le terminal), tronquée à `max` caractères (ellipse comprise).
 pub fn clip(text: &str, max: usize) -> String {
     let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let flat: String = flat.chars().filter(|c| !c.is_control()).collect();
     if max == 0 {
         return String::new();
     }
@@ -138,5 +140,7 @@ mod tests {
         assert_eq!(clip("abcdef", 10), "abcdef");
         assert_eq!(clip("abcdef", 4), "abc…");
         assert_eq!(clip("abcdef", 0), "");
+        // Une séquence ANSI ne doit pas atteindre le terminal.
+        assert_eq!(clip("a\u{1b}[31mb", 20), "a[31mb");
     }
 }

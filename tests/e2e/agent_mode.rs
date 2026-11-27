@@ -54,7 +54,10 @@ fn a_renamed_binary_serves_its_agent_alone() {
         .map(|t| t["name"].as_str().unwrap())
         .collect();
     tools.sort();
-    assert_eq!(tools, ["ask", "status", "stop"]);
+    assert_eq!(
+        tools,
+        ["ask", "config", "history", "logs", "session", "status", "stop"]
+    );
     let reply = ok_at(agent.port, "ask", json!({"prompt": "bonjour"}));
     assert!(reply["reply"].as_str().unwrap().contains("echo:bonjour"), "{reply}");
     assert_eq!(agent.bridge, None, "pas de pont sans --bridge");

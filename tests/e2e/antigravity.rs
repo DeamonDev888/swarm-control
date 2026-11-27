@@ -18,8 +18,10 @@ fn antigravity_agent_lifecycle_and_sessions() {
         }),
     );
     assert_eq!(created["runner"], "antigravity");
-    assert!(h.ws.join(".antigravity/agents/nova.md").is_file());
-    assert!(h.ws.join(".antigravity/settings_nova.json").is_file());
+    // Profil dédié à l'agent (PLAN §4.4) : `<ws>/agents/nova/.antigravity/…`.
+    let profile = h.ws.join("agents").join("nova").join(".antigravity");
+    assert!(profile.join("agents/nova.md").is_file());
+    assert!(profile.join("settings_nova.json").is_file());
 
     // Doublon refusé.
     let (err, _) =

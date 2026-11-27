@@ -58,6 +58,7 @@ fn run_with(default_agent: Option<String>, args: impl IntoIterator<Item = String
             return ExitCode::SUCCESS;
         }
         Ok(Parsed::Serve(mut options)) => {
+            crate::debug::init(options.debug);
             if options.agent.is_none() {
                 options.agent = default_agent;
             }

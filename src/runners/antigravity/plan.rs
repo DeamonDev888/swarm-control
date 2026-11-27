@@ -85,8 +85,11 @@ mod tests {
         let ws = std::env::temp_dir().join(format!("swarm-agy-plan-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&ws);
         std::fs::create_dir_all(&ws).unwrap();
-        std::fs::write(ws.join("model-aliases.json"), r#"{"neon":"gemini-4-neon-medium"}"#)
-            .unwrap();
+        std::fs::write(
+            ws.join("model-aliases.json"),
+            r#"{"neon":"gemini-4-neon-medium"}"#,
+        )
+        .unwrap();
         agents::create(
             &ws,
             &CreateArgs {
@@ -99,8 +102,11 @@ mod tests {
             },
         )
         .unwrap();
+        // Le profil dédié (PLAN §4.4) est l'emplacement d'écriture des nouveaux agents.
+        let settings = agents::antigravity_settings_path(&ws, "pbot");
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
         std::fs::write(
-            ws.join(".antigravity/settings_pbot.json"),
+            settings,
             r#"{"model":"neon","env":{"AGENT_TIMEOUT_MS":"42000"},"agent":"pbot","runner":"antigravity"}"#,
         )
         .unwrap();
