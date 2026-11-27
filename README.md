@@ -42,6 +42,14 @@ Il fonctionne avec les outils d'IA en ligne de commande que vous avez déjà :
   <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-live-strip.svg" alt="swarm-control — plusieurs agents qui travaillent en parallèle" width="880" />
 </div>
 
+### Agents persistants uniquement (Discord, WhatsApp, X, Google & Custom)
+
+Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà des connecteurs **Discord** (`--bridge` HTTP & MCP), **WhatsApp**, **X** et **Google (Gmail & Calendar)**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp, X, Google et Custom" width="880" />
+</div>
+
 ### Les mots à connaître
 
 | Mot | En clair |

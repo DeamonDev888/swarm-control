@@ -7,6 +7,8 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-27
+
 ### Ajouté
 - **Un exécutable par agent** : le binaire copié sous le nom d'un agent (`sniper`, `sniper.exe`),
   ou lancé avec `--agent NAME`, ne sert que cet agent (serveur MCP `swarm-<agent>`, file,
@@ -27,9 +29,9 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
   (`bridge/history/…jsonl`), outils MCP d'inspection (`history`, `logs`, `config`, `session`),
   découverte des pairs `swarm-*` et authentification serveur optionnelle.
 - **Identité visuelle SVG animée** : bannière frelon cybernétique animée, console MCP
-  multi-agents en direct et 6 classes d'agents (`Coordinator`, `Coder`, `Explorer`, `Verifier`,
-  `Browser`, `Monitor`) compatibles GitHub, crates.io et docs.rs.
-
+  multi-agents en direct, 6 classes d'agents (`Coordinator`, `Coder`, `Explorer`, `Verifier`,
+  `Browser`, `Monitor`) et classe d'agents persistants (`Hornet Discord`, `Hornet WhatsApp`,
+  `Hornet Customisable`), compatibles GitHub, crates.io et docs.rs.
 - **Installation en une ligne** depuis l'exécutable publié : `install.ps1` (Windows, sans droits
   administrateur, ajout au PATH utilisateur) et `install.sh` (Linux / macOS, `~/.local/bin`).
 - README réécrit pour les débutants : installation, premiers pas, glossaire, interface terminal,

@@ -2,8 +2,12 @@
 //!
 //! ![swarm-control](https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/hornet-pixel-banner.svg)
 //!
-//! Agents IA persistants (Claude Code, Hermes) pilotés par MCP, servis par
+//! Agents IA persistants (Claude Code, Hermes, Antigravity) pilotés par MCP, servis par
 //! [LiteMCP](https://crates.io/crates/litemcp).
+//!
+//! ![Archétypes d'agents](https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-live-strip.svg)
+//!
+//! ![Agents persistants Discord, WhatsApp et Custom](https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-persistent-bridges.svg)
 //!
 //! Carte des modules (du plus bas au plus haut niveau) :
 //!
