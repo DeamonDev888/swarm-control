@@ -1,5 +1,6 @@
-//! Inventaire des agents (Claude et Hermes).
+//! Inventaire des agents (Claude, Hermes et Antigravity).
 
+mod antigravity;
 mod claude;
 mod hermes;
 mod info;
@@ -16,6 +17,7 @@ pub fn list(ws: &Path) -> Vec<AgentInfo> {
             out.push(agent);
         }
     }
+    out.extend(antigravity::scan(ws));
     out.sort_by(|a, b| (a.runner.as_str(), &a.name).cmp(&(b.runner.as_str(), &b.name)));
     out
 }

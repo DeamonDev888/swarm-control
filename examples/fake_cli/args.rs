@@ -26,4 +26,8 @@ impl Args {
     pub fn is_hermes(&self) -> bool {
         self.has("chat")
     }
+
+    pub fn is_antigravity(&self) -> bool {
+        std::env::var("SWARM_RUNNER").as_deref() == Ok("antigravity")
+    }
 }

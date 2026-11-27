@@ -8,7 +8,8 @@ pub fn invalid(msg: impl Into<String>) -> ToolError {
 }
 
 pub fn parse_runner(s: &str) -> Result<Runner, ToolError> {
-    Runner::parse(s).ok_or_else(|| invalid(format!("runner inconnu '{s}' (claude | hermes)")))
+    Runner::parse(s)
+        .ok_or_else(|| invalid(format!("runner inconnu '{s}' (claude | hermes | antigravity)")))
 }
 
 pub fn opt_runner(s: &Option<String>) -> Result<Option<Runner>, ToolError> {

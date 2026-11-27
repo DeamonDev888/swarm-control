@@ -1,7 +1,7 @@
 //! Modification d'un agent : aiguillage vers le runner.
 
 use super::runner::Runner;
-use super::{claude, hermes, lookup};
+use super::{antigravity, claude, hermes, lookup};
 use serde_json::{Map, Value};
 use std::path::Path;
 
@@ -28,6 +28,7 @@ pub fn update(
     match runner {
         Runner::Claude => claude::update::apply(ws, name, up, &mut changes)?,
         Runner::Hermes => hermes::update::apply(ws, name, up, &mut changes)?,
+        Runner::Antigravity => antigravity::update::apply(ws, name, up, &mut changes)?,
     }
     if changes.is_empty() {
         changes.push("Aucune modification demandée.".into());

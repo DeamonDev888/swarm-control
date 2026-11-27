@@ -4,6 +4,7 @@
 pub enum Runner {
     Claude,
     Hermes,
+    Antigravity,
 }
 
 impl Runner {
@@ -11,6 +12,7 @@ impl Runner {
         match self {
             Runner::Claude => "claude",
             Runner::Hermes => "hermes",
+            Runner::Antigravity => "antigravity",
         }
     }
 
@@ -18,6 +20,7 @@ impl Runner {
         match s {
             "claude" => Some(Runner::Claude),
             "hermes" => Some(Runner::Hermes),
+            "antigravity" => Some(Runner::Antigravity),
             _ => None,
         }
     }

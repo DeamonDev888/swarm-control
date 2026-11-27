@@ -11,7 +11,8 @@ use serde_json::json;
 use std::path::Path;
 
 const DESCRIPTION: &str = "Crée un agent persistant. Claude : .claude/agents/<nom>.md + settings_<nom>.json + \
-    .mcp.<nom>.json. Hermes : profil natif (hermes profile create) + SOUL.md. Le prompt définit sa persona. \
+    .mcp.<nom>.json. Hermes : profil natif (hermes profile create) + SOUL.md. Antigravity : \
+    .antigravity/agents/<nom>.md + settings_<nom>.json (CLI agy). Le prompt définit sa persona. \
     resident:true le rend aussitôt résident (serveur MCP propre, file de demandes).";
 
 #[derive(Deserialize)]

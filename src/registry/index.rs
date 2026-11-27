@@ -13,7 +13,7 @@ type Map = HashMap<String, Arc<LiveRun>>;
 /// Durée de rétention d'un run terminé.
 const FINISHED_TTL_MS: u64 = 60 * 60 * 1000;
 /// Runners connus (pour retrouver un agent sans préciser son runner).
-const RUNNERS: [&str; 2] = ["claude", "hermes"];
+const RUNNERS: [&str; 3] = ["claude", "hermes", "antigravity"];
 
 static LIVE: Mutex<Option<Map>> = Mutex::new(None);
 static RUN_COUNTER: AtomicU64 = AtomicU64::new(0);

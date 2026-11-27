@@ -20,7 +20,12 @@ fn main() {
     if profile::handle(&args) {
         return;
     }
-    let mut prompt = String::new();
-    let _ = std::io::stdin().read_to_string(&mut prompt);
+    let prompt = if args.is_antigravity() {
+        args.after("-p").unwrap_or_default()
+    } else {
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_to_string(&mut buf);
+        buf
+    };
     reply::answer(&args, &prompt);
 }

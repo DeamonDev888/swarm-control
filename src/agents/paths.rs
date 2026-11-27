@@ -40,3 +40,19 @@ pub fn global_mcp_path(ws: &Path) -> PathBuf {
 pub fn hermes_profile_dir(name: &str) -> PathBuf {
     config::native_hermes_home().join("profiles").join(name)
 }
+
+pub fn antigravity_dir(ws: &Path) -> PathBuf {
+    ws.join(".antigravity")
+}
+
+pub fn antigravity_agents_dir(ws: &Path) -> PathBuf {
+    antigravity_dir(ws).join("agents")
+}
+
+pub fn antigravity_prompt_path(ws: &Path, name: &str) -> PathBuf {
+    antigravity_agents_dir(ws).join(format!("{name}.md"))
+}
+
+pub fn antigravity_settings_path(ws: &Path, name: &str) -> PathBuf {
+    antigravity_dir(ws).join(format!("settings_{name}.json"))
+}

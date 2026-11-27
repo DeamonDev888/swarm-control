@@ -1,8 +1,8 @@
 //! Runner Claude Code : `claude -p --output-format json`, prompt sur stdin.
 
-mod aliases;
+pub(super) mod aliases;
 mod args;
-mod envelope;
+pub(super) mod envelope;
 mod mcp;
 mod persona;
 mod plan;

@@ -2,7 +2,7 @@
 
 pub fn text() -> String {
     format!(
-        "swarm-control {} — agents persistants (Claude Code, Hermes) en MCP\n\n\
+        "swarm-control {} — agents persistants (Claude Code, Hermes, Antigravity) en MCP\n\n\
          USAGE (instance) : swarm-control [--port N] [--host H] [--workspace DIR] [--instance N] [--resident AGENT[,AGENT…]]\n\
          USAGE (agent)    : swarm-control --agent AGENT [--port N] [--bridge N] [--host H] [--workspace DIR]\n\
          \x20                  ou le binaire copié sous le nom de l'agent (`sniper`, `sniper.exe`)\n\n\

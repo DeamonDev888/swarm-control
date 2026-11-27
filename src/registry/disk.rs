@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::Path;
 
-const RUNNERS: [&str; 2] = ["claude", "hermes"];
+const RUNNERS: [&str; 3] = ["claude", "hermes", "antigravity"];
 
 /// Modifie (ou crée) l'objet `lastRun` de l'agent.
 pub fn record(ws: &Path, runner: &str, agent: &str, edit: impl FnOnce(&mut Value)) {

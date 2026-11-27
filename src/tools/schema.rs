@@ -2,14 +2,14 @@
 
 use litemcp::zod::{self, Obj, Schema};
 
-pub const RUNNERS: &[&str] = &["claude", "hermes"];
+pub const RUNNERS: &[&str] = &["claude", "hermes", "antigravity"];
 
 pub fn name_schema(desc: &str) -> impl Schema + 'static {
     zod::describe(desc, zod::string().min(1).max(128))
 }
 
 pub fn runner_opt() -> impl Schema + 'static {
-    zod::describe("Runner (si l'agent existe côté claude ET hermes)", zod::enumeration(RUNNERS))
+    zod::describe("Runner (si l'agent existe sur plusieurs runners)", zod::enumeration(RUNNERS))
 }
 
 pub fn config_opt() -> impl Schema + 'static {
@@ -25,7 +25,10 @@ pub fn run_object() -> Obj {
     zod::object()
         .field(
             "runner",
-            zod::describe("claude = Claude Code, hermes = Nous Hermes", zod::enumeration(RUNNERS)),
+            zod::describe(
+                "claude = Claude Code, hermes = Nous Hermes, antigravity = Antigravity CLI (agy)",
+                zod::enumeration(RUNNERS),
+            ),
         )
         .field("prompt", zod::describe("Instruction envoyée à l'agent", zod::string().min(1)))
         .opt(

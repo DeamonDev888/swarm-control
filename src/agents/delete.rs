@@ -1,7 +1,7 @@
 //! Suppression d'un agent : aiguillage vers le runner, puis oubli de la session et de l'état.
 
 use super::runner::Runner;
-use super::{claude, hermes, lookup};
+use super::{antigravity, claude, hermes, lookup};
 use crate::{owners, registry, sessions, state};
 use std::path::Path;
 
@@ -16,6 +16,7 @@ pub fn delete(ws: &Path, name: &str, wanted: Option<Runner>) -> Result<Deleted, 
     let deleted = match runner {
         Runner::Claude => claude::delete::delete(ws, name),
         Runner::Hermes => hermes::delete::delete(name),
+        Runner::Antigravity => antigravity::delete::delete(ws, name),
     };
     sessions::delete(ws, runner.as_str(), name);
     state::remove(ws, runner.as_str(), name);

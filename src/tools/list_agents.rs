@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::Path;
 
-const DESCRIPTION: &str = "Liste les agents (Claude et Hermes) avec leur état de session, leur run en cours \
+const DESCRIPTION: &str = "Liste les agents (Claude, Hermes et Antigravity) avec leur état de session, leur run en cours \
     et, s'ils sont résidents, l'instance et l'URL qui les héberge. details:true ajoute modèle, MCP, \
     taille du prompt.";
 

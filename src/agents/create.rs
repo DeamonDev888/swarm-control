@@ -1,7 +1,7 @@
 //! Création d'un agent : aiguillage vers le runner.
 
 use super::runner::Runner;
-use super::{claude, hermes};
+use super::{antigravity, claude, hermes};
 use std::path::{Path, PathBuf};
 
 pub struct CreateArgs<'a> {
@@ -26,5 +26,6 @@ pub fn create(ws: &Path, args: &CreateArgs) -> Result<Created, String> {
     match args.runner {
         Runner::Claude => claude::create::create(ws, args),
         Runner::Hermes => hermes::create::create(ws, args),
+        Runner::Antigravity => antigravity::create::create(ws, args),
     }
 }

@@ -2,8 +2,11 @@
 
 use super::RunResult;
 
-const DEAD_SESSION_PHRASES: [&str; 6] = [
+const DEAD_SESSION_PHRASES: [&str; 9] = [
     "no conversation found",
+    "conversation not found",
+    "invalid conversation",
+    "unknown conversation",
     "invalid session",
     "session not found",
     "could not find session",
@@ -28,6 +31,7 @@ mod tests {
     #[test]
     fn detects_dead_sessions_only() {
         assert!(mentions_dead_session("EXIT_CODE_1", "No conversation found with session ID"));
+        assert!(mentions_dead_session("EXIT_CODE_1", "Conversation not found: conv-1"));
         assert!(mentions_dead_session("Session not found: x", ""));
         assert!(!mentions_dead_session("TIMEOUT", ""));
     }

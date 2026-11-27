@@ -1,11 +1,12 @@
-//! Exécution d'un agent : Claude Code ou Hermes, avec reprise de session.
+//! Exécution d'un agent : Claude Code, Hermes ou Antigravity, avec reprise de session.
 //!
 //! Cycle commun (`prepare` puis `execute`) :
 //! 1. résoudre l'agent et réserver le run dans le registre ;
 //! 2. reprendre la dernière session de l'agent (`autoResume`) ;
-//! 3. lancer le CLI (`claude/` ou `hermes/`), enregistrer la session rendue ;
+//! 3. lancer le CLI (`claude/`, `hermes/` ou `antigravity/`), enregistrer la session rendue ;
 //! 4. session reprise invalide : l'oublier et relancer à neuf, une fois.
 
+mod antigravity;
 mod claude;
 mod end;
 mod execute;

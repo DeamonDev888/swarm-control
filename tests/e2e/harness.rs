@@ -95,6 +95,7 @@ fn command_for(exe: &Path, root: &Path, ws: &Path, hermes_home: &Path) -> Comman
         .env("HERMES_HOME", hermes_home)
         .env("CLAUDE_BIN", &cli)
         .env("HERMES_BIN", &cli)
+        .env("AGY_BIN", &cli)
         .env("ANTHROPIC_AUTH_TOKEN", "primary-token")
         .env_remove("SWARM_WORKSPACE")
         .env_remove("OVERMIND_WORKSPACE");

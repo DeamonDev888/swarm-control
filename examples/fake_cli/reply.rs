@@ -4,9 +4,10 @@ use crate::args::Args;
 use std::io::Write;
 
 pub fn answer(args: &Args, prompt: &str) {
-    let resume = args.after("--resume");
+    let resume = args.after("--resume").or_else(|| args.after("--conversation"));
     let token = std::env::var("ANTHROPIC_AUTH_TOKEN").unwrap_or_default();
     let is_hermes = args.is_hermes();
+    let is_antigravity = args.is_antigravity();
 
     if prompt.contains("SLEEP") {
         std::thread::sleep(std::time::Duration::from_secs(60));
@@ -16,7 +17,15 @@ pub fn answer(args: &Args, prompt: &str) {
         std::thread::sleep(std::time::Duration::from_millis(1500));
     }
     if let (true, Some(sid)) = (prompt.contains("DEADSESSION"), resume.as_ref()) {
-        eprintln!("No conversation found with session ID: {sid}");
+        if is_antigravity {
+            eprintln!("Conversation not found: {sid}");
+        } else {
+            eprintln!("No conversation found with session ID: {sid}");
+        }
+        std::process::exit(1);
+    }
+    if is_antigravity && prompt.contains("AGYFAIL") {
+        println!("{{\"is_error\":true,\"error\":{{\"message\":\"Unknown model\"}}}}");
         std::process::exit(1);
     }
     // Hermes réel : une erreur de fournisseur sort le message sur stdout ET code 1.
@@ -42,6 +51,12 @@ pub fn answer(args: &Args, prompt: &str) {
     if is_hermes {
         print!("{text}");
         eprintln!("session_id: {session}");
+    } else if is_antigravity {
+        let envelope = serde_json::json!({
+            "type": "result", "is_error": false,
+            "result": text, "conversation_id": session,
+        });
+        println!("{envelope}");
     } else {
         let envelope = serde_json::json!({
             "type": "result", "subtype": "success", "is_error": false,

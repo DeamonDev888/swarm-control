@@ -1,6 +1,6 @@
 //! Cycle de vie d'un run : reprise, lancement, session, clôture du registre.
 
-use super::{RunRequest, RunResult, claude, guard, hermes, session};
+use super::{RunRequest, RunResult, antigravity, claude, guard, hermes, session};
 use crate::agents::Runner;
 use crate::registry::{LiveRun, Outcome, Status};
 use crate::sessions;
@@ -59,6 +59,7 @@ fn attempt(
     match req.runner {
         Runner::Claude => claude::run(req, live, resume, cancel),
         Runner::Hermes => hermes::run(req, live, resume, cancel),
+        Runner::Antigravity => antigravity::run(req, live, resume, cancel),
     }
 }
 
