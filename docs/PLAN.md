@@ -1,164 +1,182 @@
 # Plan — swarm-control
 
-*Mis à jour le 2026-11-27. Liste à cocher : [TODO.md](TODO.md).*
+*Mis à jour le 2026-11-27. Liste à cocher : [TODO.md](TODO.md). Ce qui est fait et vérifié
+n'apparaît plus ici, sauf dans le tableau d'état du §2.*
 
 ## 1. Vision
 
 Un binaire Rust léger (LiteMCP, sans runtime async ni base de données), pour **Windows, macOS et
-Linux**, qui fabrique et pilote des agents IA :
+Linux**, qui fabrique et pilote deux familles d'agents IA (celles du README) :
 
 ```
-swarm-control                       serveur MCP d'administration (instance swarm-control-N)
- ├─ create_agent(executable:true) ─▶ sniper(.exe)   agent PERSISTANT, son propre exécutable
- │                                    ├─ MCP riche   ask · status · stop · history · session · logs · config
- │                                    ├─ CLI         sniper ask "…" · status · history · reset · serve
- │                                    ├─ TUI         MCP branchés · conversation · session · file · logs
- │                                    ├─ pont HTTP   --bridge (Discord & co, compatible overmind-bridge)
- │                                    └─ --debug     requêtes MCP, commandes lancées, reprises, retentes
- └─ run_agent(sans agentName) ────▶ agent ÉPHÉMÈRE : un tour, aucune session gardée
+swarm-control                         serveur MCP d'administration (instance swarm-control-N)
+ ├─ agents PERSISTANTS — 1 profil = 1 exécutable, session gardée 24/7
+ │    discord · whatsapp · x · google (Gmail & Calendar) · custom
+ │    └─ chacun : MCP riche · CLI · TUI · pont/connecteur · --debug
+ └─ agents de l'ESSAIM — éphémères ou nommés, lancés en parallèle (run_agents_parallel)
+      coder · browser · explorer · coordinator · monitor · verifier
 ```
 
 - **Persistant** = un nom, une définition sur disque (persona, modèle, serveurs MCP), une session
-  reprise à chaque tour, une file de demandes, un exécutable.
-- **Éphémère** = un prompt, un tour, rien de sauvegardé (déjà possible : `run_agent` sans
-  `agentName`).
-- Hors périmètre, assumé : audit, mémoire PostgreSQL, runtime async.
+  reprise à chaque tour, une file de demandes, un exécutable, un canal (pont ou connecteur MCP).
+- **Essaim** = un archétype (persona et outils prêts à l'emploi) lancé pour une tâche : un tour
+  sans rien garder (`run_agent` sans `agentName`) ou un agent nommé à durée de vie courte.
+- Hors périmètre, assumé : audit, mémoire PostgreSQL, runtime async dans la lib.
 
-## 2. État au 2026-11-27 (0.1.1 publiée, `main` plus loin)
+## 2. État au 2026-11-27
 
 | Pièce | État |
 |---|---|
-| Serveur MCP, 10 outils, schémas JSON validés | ✅ 0.1.0 |
-| Runners Claude Code et Hermes, sessions reprises, retente à neuf | ✅ 0.1.0 |
-| Agents résidents (serveur `swarm-<agent>`, file, `ask` / `status` / `stop`) | ✅ 0.1.0 |
-| Bail inter-process, instances numérotées, routage vers l'hôte | ✅ 0.1.0 |
-| Binaires Windows / macOS arm64 / Linux x86_64 par release | ✅ 0.1.0 |
-| Logo crates.io / docs.rs ; PID hors bornes sous Unix | ✅ 0.1.1 |
-| **Mode agent** : binaire renommé ou `--agent`, `--port`, `serve_agent()` | ✅ `main` (4a2d1cf) |
-| **Pont HTTP** `--bridge` compatible overmind-bridge (`/send` `/reset` `/status` `/health`) | ✅ `main` (4a2d1cf) |
-| Runner **Antigravity** | 🟡 en cours dans l'arbre de travail, non commité (autre chantier) |
-| Journal des tours, MCP riche, CLI d'agent, TUI, `--debug` | ❌ §4 |
-| `create_agent(executable:true)` | ❌ §4 |
-
-Qualité : 117 tests sur `main` (79 unitaires, 38 de bout en bout avec un faux CLI), clippy
-`-D warnings`, MSRV 1.85, `cargo deny`, CI sur les 3 OS.
+| Serveur MCP, 10 outils, schémas JSON validés ; runners Claude, Hermes, Antigravity | ✅ |
+| Agents résidents, bail inter-process, instances numérotées, routage vers l'hôte | ✅ |
+| Mode agent (binaire renommé / `--agent`), pont HTTP `--bridge` (dialecte overmind-bridge) | ✅ |
+| Journal des tours, outils `history` / `session` / `logs` / `config`, CLI d'agent, `--debug` | ✅ |
+| TUI (`ratatui`, feature `tui`), `create_agent {executable, unit}`, pairs automatiques | ✅ |
+| Jeton `SWARM_TOKEN`, binaires 5 cibles, métadonnées `cargo binstall`, `main` protégée (force-push et suppression) | ✅ |
+| **Agent Discord** en production sur le serveur | ⏳ §6 |
+| Agents WhatsApp, X, Google, Custom ; archétypes de l'essaim | ⏳ §4 |
 
 ## 3. Décisions
 
-1. **Pairs = outils MCP** : chaque agent résident est un serveur MCP annoncé dans le registre
-   LiteMCP ; ses pairs sont injectés dans sa config MCP, son modèle les appelle (`bob.ask`).
-2. **Résidents + plusieurs instances** : un agent = un serveur, une file, un fil de travail ; le CLI
-   du modèle est relancé à chaque tour. Une seule instance héberge un agent (bail).
-3. **Un seul binaire** : `swarm-control` sert une instance ; copié sous le nom d'un agent, il sert
-   cet agent. Lancé dans un terminal → TUI ; sous systemd ou `--headless` → MCP + pont, sans
-   interface. `sniper ask …` passe par le serveur MCP de l'agent s'il tourne déjà.
-4. **Journal des tours propre à swarm-control** (§4.1) : la conversation vit aussi dans la session
-   du CLI (SQLite chez Hermes, JSONL chez Claude), mais chacun dans son format ; un journal à nous,
-   indépendant du runner, nourrit `history`, la CLI et la TUI.
-5. **TUI** : `ratatui` + `crossterm` (synchrones, pas de runtime async), derrière une feature `tui`
-   active par défaut dans les binaires publiés ; la lib reste légère pour qui l'importe.
+1. **Pairs = outils MCP** : chaque résident est un serveur MCP annoncé ; ses pairs sont injectés
+   dans sa config MCP (`bob.ask`).
+2. **Un seul binaire** : `swarm-control` sert une instance ; copié sous le nom d'un agent, il sert
+   cet agent (TUI dans un terminal, `--headless` sous systemd).
+3. **Journal des tours propre à swarm-control**, indépendant du runner.
+4. **Un canal = un pont HTTP ou un serveur MCP, jamais du code de plateforme dans la lib** :
+   Discord, WhatsApp et X exigent des clients async et des SDK lourds ; ils vivent dans des
+   process à part (routeur, serveur MCP) qui parlent au pont de l'agent. La lib ne connaît que
+   le **dialecte** (bloc de contexte, réponse vide si l'agent a déjà posté).
+5. **Modèles d'agents** (*templates*) livrés dans le binaire : persona, serveurs MCP attendus,
+   variables requises, port de pont par défaut. `create_agent {template}` les instancie.
 6. **grokbot** : plus tard (commande inconnue, aucun binaire).
 
-## 4. Feuille de route (dans l'ordre)
+## 4. Feuille de route
 
-### 4.1 Journal des tours et MCP riche *(socle commun)*
-- `bridge/history/<runner>-<agent>.jsonl` : une ligne par tour `{ts, from, via, prompt, reply,
-  error, sessionId, durationMs, queuedMs}`, écrite par le fil de travail ; rotation par taille
-  (ex. 5 Mio) ; secrets jamais journalisés (prompts déjà sans `env`).
-- Outils de l'agent : `history {limit, before}`, `session {action: show|reset|set}`, `logs` (fin
-  de sortie du tour en cours / du dernier), `config` (lecture masquée).
-- Le pont `/reset` et l'outil `session reset` partagent `Ctx::reset_session`.
+### 4.1 Modèles d'agents (socle commun aux §4.2-4.3)
+- `create_agent {template: "discord" | "whatsapp" | "x" | "google" | "custom" | "coder" | …}` :
+  persona (`SOUL.md` / prompt), serveurs MCP attendus (noms seulement, jamais de secret),
+  variables d'environnement requises, `executable` / `unit` / port de pont par défaut.
+- `swarm-control templates` (CLI) et `list_templates` (champ de `list_agents` ou outil) pour les
+  lister ; `doctor --agent X` vérifie les variables et serveurs MCP attendus par son modèle.
+- Modèles écrits en JSON/Markdown dans `assets/templates/`, inclus par `include_str!`, surchargeables
+  par `<workspace>/templates/`.
+- **11 agents préconfigurés alignés sur les logos** : `discord`, `whatsapp`, `x`, `google`,
+  `custom`, `coder`, `browser`, `explorer`, `coordinator`, `monitor`, `verifier` — mêmes slugs que
+  les logos de `assets/classes/` et que MCP Control (v0.8.12, onglet Swarm, `/swarm-logo/<classe>.svg`).
+  MCP Control devine aujourd'hui la classe par regex sur le nom (`sniperbot_analyst` → *explorer*) :
+  swarm-control publie un champ **`class`** (annonce LiteMCP, `status`, `list_agents`, `/status` du
+  pont) que MCP Control lit en priorité.
 
-### 4.2 CLI de l'agent et `--debug`
-- Sous-commandes : `serve` (défaut), `ask "<prompt>"`, `status`, `history [-n N]`, `reset`,
-  `config`, `schema <outil>` ; côté instance : `agents`, `run`, `runs`, `doctor`.
-- Client MCP minimal réutilisé (`peers`) : la CLI parle au serveur de l'agent s'il tourne, sinon
-  exécute le tour elle-même (même bail, même session).
-- `--debug` / `SWARM_DEBUG=1` : une ligne par requête MCP, commande lancée (secrets masqués),
-  session reprise ou oubliée, retente, bail pris ou repris.
+### 4.2 Agents persistants (README : Discord, WhatsApp, X, Google, Custom)
 
-### 4.3 TUI de l'agent
-- Panneaux : en-tête (agent, runner, modèle, session, ports MCP et pont) · serveurs MCP branchés
-  et leur état (sonde `/health` ou `initialize`) · conversation (journal §4.1, défilement) · file
-  et tour en cours (qui, depuis quand, sortie en direct) · logs / debug.
-- Saisie : écrire un message = un `ask` ; raccourcis `r` reset, `s` stop, `d` debug, `q` quitter
-  (l'agent continue sous systemd s'il n'a pas été lancé par la TUI).
-
-### 4.4 Fabrication d'agents
-- `create_agent {executable:true}` : copie le binaire dans `<workspace>/bin/<agent>(.exe)`, rend
-  son chemin ; `delete_agent` le retire. Option `unit:true` (Linux) : écrit une unit systemd
-  `--headless`, sans l'activer.
-- `run_agent` sans `agentName` documenté comme **éphémère** (aucune session gardée, aucun
-  fichier d'état).
-- Dossier de profil par agent (aujourd'hui : workspace partagé) ; plusieurs agents peuvent
-  partager un exécutable.
-
-### 4.5 Migration de Sniper (serveur 192.168.40.9) — voir §6
-### 4.6 Pairs automatiques
-- Découverte des `swarm-*` du registre, injection dans la config MCP de chaque agent (Claude :
-  `--mcp-config` ; Hermes : `mcp_servers` du profil ; Antigravity : selon le runner).
-### 4.7 Runner générique
-- Un runner décrit en JSON (commande, livraison du prompt, reprise, modèle, extraction de la
-  session). Vérifiables ici : opencode, kilo, gemini, qwen. Absents : cline, openclaw, grokbot.
-
-## 5. Corrections et optimisations à faire
-
-### À corriger vite
-| # | Quoi | Où | Pourquoi |
+| Agent | Entrée (qui le réveille) | Sortie (comment il répond) | À faire |
 |---|---|---|---|
-| C1 | **CI rouge sur `main`** : 2 tests de `cli::exe` utilisent des chemins Windows, où `\` n'est un séparateur que sous Windows | `src/cli/exe.rs` | corrigé dans l'arbre (cas Windows sous `cfg(windows)`), **à committer et pousser** |
-| C2 | `Holder::is_stale` teste le PID **avant** l'âge du bail : sous Windows chaque test lance `tasklist` (≈ 50–100 ms) même pour un bail déjà périmé | `src/owners/holder.rs` | inverser : âge d'abord, PID ensuite |
-| C3 | Pont `/send` : si le client HTTP se déconnecte, le tour en file n'est pas annulé | `src/residents/bridge/routes.rs` | sonder la socket pendant l'attente (comme `ask` avec le jeton d'annulation) |
-| C4 | Action `softprops/action-gh-release` sur Node 20 (déprécié par GitHub) | `.github/workflows/release.yml` | monter de version (Dependabot le proposera) |
-| C5 | Docs en retard : PLAN §5 (fait ici), `RESIDENT-AGENTS.md` ne connaît pas le mode agent ni le pont | `docs/` | mettre à jour |
+| **discord** | pont `--bridge` `/send` (routeur Discord) | `result` du pont, ou post direct via MCP `serveur_discord` | modèle ; migration du serveur §6 ; routeur Rust à part plus tard |
+| **whatsapp** | pont `/send` avec dialecte `whatsapp` (bloc `[WHATSAPP CONTEXT]` : chat, expéditeur, groupe) | `result`, ou MCP WhatsApp | dialecte paramétrable du pont ; modèle ; passerelle externe documentée |
+| **x** | sondage périodique (mentions, DM) via serveur MCP X | MCP X (post, réponse) | **tâches planifiées** (§4.4) ; garde-fou de publication (brouillon ou validation) |
+| **google** (Gmail & Calendar) | sondage périodique (nouveaux mails, agenda du jour) | MCP Google (brouillons, événements) | tâches planifiées ; OAuth hors binaire, jetons par l'environnement |
+| **custom** | pont `/send` générique (dialecte `raw` ou `json`) ou planification | tout serveur MCP branché | dialecte `raw` ; doc « brancher Telegram / Slack / Matrix / webhook » |
 
-### Robustesse
-- **Runs perdus au redémarrage** : seuls PID et statut sont sur disque, pas la sortie. Écrire la fin
-  de sortie dans le journal (§4.1) suffit pour la consultation.
-- **Pont et serveurs sans authentification** : écoute en `127.0.0.1` par défaut et agents en
-  `--dangerously-skip-permissions`. Avant toute écoute hors loopback : signature LiteMCP
-  (`auth-sign`) / TLS côté MCP, jeton partagé côté pont.
-- **Tests sensibles au temps** : plusieurs tests e2e attendent un état disque juste après une action
-  (un cas corrigé dans `control`). Passer en revue `resident_queue` et `multi_instance` avec
-  `eventually`.
-- **Couverture** : le pont n'est testé qu'avec un agent Claude ; ajouter un agent Hermes (sortie
-  sur stdout, session sur stderr) et un `/reset` pendant un tour en cours.
-- **Smoke tests réels jamais faits** : un run Hermes réussi avec un vrai modèle puis sa reprise ;
-  idem Claude avec un vrai jeton.
+- **Dialectes du pont** : `--bridge-dialect discord|whatsapp|raw` (défaut `discord`, compatible
+  overmind-bridge) ; règle « réponse vide si déjà posté » propre à chaque dialecte.
+- **Accusé et suivi** : `POST /send {async:true}` → `202 {turnId}` puis `GET /turn/<id>` — pour
+  les passerelles qui coupent à 30-60 s (WhatsApp, webhooks).
 
-### Performance et légèreté
-- `pid_alive` sous Windows lance un process `tasklist` par appel : regrouper (un `tasklist` pour
-  tous les PID d'un passage du balayeur), ou cache court par PID.
-- Pont : un fil par connexion (plafond 64) ; suffisant pour un routeur Discord, à revoir si un
-  agent sert beaucoup de clients (file déjà bornée par le fil de travail unique).
-- Latence Hermes ≈ 10–18 s par tour (démarrage Python) : inhérente au CLI ; piste future, le mode
-  serveur de Hermes s'il en expose un.
-- Garder l'objectif « quelques Mio » : mesurer mémoire et taille du binaire à chaque release
-  (la TUI les fera grossir, d'où la feature `tui`).
+### 4.3 Agents de l'essaim (README : coder, browser, explorer, coordinator, monitor, verifier)
+
+| Archétype | Rôle | Outils / MCP attendus |
+|---|---|---|
+| **coder** | écrit et modifie du code dans un dossier donné | runner Claude/Antigravity, accès fichiers |
+| **browser** | navigue, lit et remplit des pages | serveur MCP navigateur (Playwright…) |
+| **explorer** | cherche et résume (code, web, docs), lecture seule | outils en lecture ; permissions restreintes |
+| **coordinator** | découpe une tâche et répartit sur les autres | `run_agents_parallel`, `agent_control` de l'instance |
+| **monitor** | surveille (logs, URL, métriques) et alerte | tâches planifiées (§4.4), canal d'alerte (pair discord) |
+| **verifier** | relit le travail d'un autre et tranche (OK / à reprendre) | lecture seule, sortie structurée |
+
+- `run_agent {archetype: "explorer", prompt}` : un tour éphémère avec la persona de l'archétype.
+- `run_agents_parallel` accepte `archetype` par entrée ; option `verify: true` qui enchaîne un
+  `verifier` sur chaque résultat.
+- **Permissions par archétype** : `explorer` et `verifier` sans `--dangerously-skip-permissions`
+  (outils en lecture seule côté Claude : `--allowedTools`).
+
+### 4.4 Tâches planifiées (monitor, x, google)
+- `--every 5m "<prompt>"` sur un agent résident, ou `schedule` dans sa définition ; tours mis dans
+  la **même file** que les demandes (pas de tour concurrent), marqués `from: "schedule"` au journal.
+- Pas de cron complet : intervalle + fenêtre horaire optionnelle ; dérive rattrapée sans rafale
+  (un tour manqué n'est pas rejoué deux fois).
+
+### 4.5 Runner générique
+- Runner décrit en JSON (commande, livraison du prompt, reprise, modèle, extraction de la
+  session) : opencode, kilo, gemini, qwen d'abord ; cline, openclaw, grokbot ensuite.
+
+## 5. Corrections, optimisations et tests
+
+### Corrections
+
+| # | Quoi | Où | Correction |
+|---|---|---|---|
+| K1 | **README corrompu dans l'arbre** : accents en double encodage (séquences d'octets C3 83 xx / C3 A2 E2 82 AC xx / C3 82 xx : l'UTF-8 relu en Windows-1252 puis réécrit) | `README.md` | ré-encodé dans l'arbre le 2026-11-27 ; contrôle en place : `scripts/check-encoding.sh` (verify.sh + job release-scripts) |
+| K2 | **`main` local et `origin/main` divergent** (6 commits locaux, 7 distants dont `v0.1.2`) ; le force-push est désormais interdit par la règle GitHub | git | fusionner `origin/main` dans `main` (pas de rebase forcé), résoudre README / release.yml |
+| K3 | Tag `v0.1.2` hors de `main` ; permaliens README en `/v0.1.2/` alors que la release « Latest » est `v0.1.1` | git, README | après K2 : publier la 0.1.2 (ou 0.1.3) depuis `main` |
+| K4 | Exemples `sniper` partout alors que l'agent du README est **discord** | README, `help.rs`, `cli/mod.rs`, `lib.rs`, docs | remplacer par `discord` (exemple de pont : `--bridge 3011`, pas 3001 déjà pris par le worker Node) |
+| K5 | README périmé : badge « ~2 Mio » (mesuré 3,02 Mio avec TUI) ; « À venir : pairs injectés » alors que c'est fait | README | mettre à jour |
+| K6 | Fichiers de travail non suivis à la racine : `test-lanceur*.tmp.sh`, `lancer-profil.sh`, `post-discord-*.md`, `SKILL.autoclaw-profils.md` | racine | supprimer ou ranger (`work/`, ignoré) |
+| K7 | Tags `v*` non protégés : un tag de release peut être déplacé | GitHub | règle de tag (création réservée, ni déplacement ni suppression) |
+| K8 | **Test instable** `resident_hosting::agent_stop_closes_the_server_and_frees_everything` : échoue dans la suite complète (l. 27, « écoute encore »), passe seul 3 fois sur 3 — un autre test reprend le port libéré dans 23080-23099 | `tests/e2e/resident_hosting.rs` | vérifier que le port ne sert plus **cet** agent (`initialize` → nom `swarm-alice`) au lieu de « port fermé », ou lier les résidents de test sur port 0 |
+
+### Optimisations
+- `pids_alive` (Windows) lance un `tasklist` complet à chaque passage même si tous les PID sont
+  en cache : servir le cache d'abord, ne requêter que les PID manquants.
+- Pont : un fil par connexion et `/send` qui attend jusqu'à 1 h → 64 clients lents bloquent le
+  pont ; plafonner la file par agent (`429` au-delà de N demandes en attente) et proposer
+  `/send {async:true}` (§4.2).
+- Démarrage de la TUI : la sonde des serveurs MCP (`tui/probe.rs`) est séquentielle ; la passer en
+  parallèle bornée (un fil par serveur, délai court).
+- Latence Hermes ≈ 10-18 s (démarrage Python) : inhérente au CLI ; mode serveur Hermes s'il existe.
+- Mesurer taille et mémoire à chaque release (script `scripts/measure.sh`, résultat dans le
+  CHANGELOG) ; objectif « quelques Mio » tenu.
+
+### Tests unitaires à ajouter (fichiers de plus de 60 lignes sans `#[cfg(test)]`)
+- **Process** : `alive.rs` (`csv_pid`, `valid_unix_pid`, cache TTL), `readers.rs`, `wait.rs`.
+- **Résidents** : `ctx.rs` (drapeau `reset_after_turn`), `turn.rs`, `mcp/ask.rs` (cycle `via`,
+  délai), `bridge/mod.rs` (`503` au-delà de `MAX_CONNECTIONS`).
+- **Runners** : `execute.rs`, `claude/mod.rs` (construction des arguments, reprise).
+- **Registre et baux** : `registry/index.rs`, `registry/live_run.rs`, `owners/takeover.rs`.
+- **Outils** : `create_agent.rs` (options `executable`/`unit`/`template`), `run_args.rs`,
+  `run_agent.rs`, `list_agents.rs`, `agent_control/disk.rs`, `run_agents_parallel/launch.rs`.
+- **Agents** : `lookup.rs`, `list/claude.rs`, `list/antigravity.rs`, `hermes/create.rs`,
+  `claude/settings_edit.rs`, `antigravity/update.rs`.
+- **CLI / TUI** : `cli/ask.rs` (choix hébergé / pair / local), `cli/agent.rs`, `tui/mod.rs`
+  (boucle d'événements sur un faux terminal `ratatui::backend::TestBackend`).
+- **Nouveaux** : dialectes du pont (§4.2), modèles (§4.1 : chaque modèle intégré se charge et
+  valide son schéma), planificateur (§4.4 : pas de rafale, pas de tour concurrent).
+
+### Robustesse et sécurité
+- Signature LiteMCP (`auth-sign`) / TLS avant toute écoute hors loopback.
+- Smoke réel Claude avec un vrai jeton.
+- Agents X et Google : aucune publication ni envoi de mail sans garde-fou (mode brouillon par
+  défaut, `SWARM_ALLOW_PUBLISH=1` pour l'autoriser).
 
 ### Distribution
-- Binaires manquants : **macOS x86_64** et **Linux aarch64** (serveurs ARM, Raspberry Pi).
-- Logo docs.rs pointé sur `main` : le figer sur le tag de la version pour qu'une refonte d'image
-  ne change pas les docs déjà publiées.
-- Paquets : `cargo binstall` (métadonnées), puis Homebrew / Scoop si la demande existe.
+- Logo docs.rs figé sur le tag de la version.
+- Homebrew / Scoop si la demande existe.
 
-## 6. Migration de Sniper (serveur Ubuntu 192.168.40.9)
+## 6. Agent Discord — migration du serveur Ubuntu 192.168.40.9
 
 État constaté le 2026-11-27 (lecture seule) : Discord → `discord-master` (Node, un token, 8
-préfixes) → `POST localhost:3001/send` → `overmind-bridge.js` (Node, `discord_llm`) →
-`overmind-mcp` :3099 → `run_agent(hermes, sniperbot_analyst)` ; profil Hermes MiniMax-M3.1-Flash,
-7 serveurs MCP ; l'agent répond lui-même sur Discord via `serveur_discord`. Les 7 agents
-`trade*` ont la même forme (≈ 57 Mio par worker Node).
+préfixes) → `POST localhost:3001/send` → `overmind-bridge.js` (Node) → `overmind-mcp` :3099 →
+`run_agent(hermes, sniperbot_analyst)` ; l'agent répond lui-même via `serveur_discord`. Les
+agents `trade*` ont la même forme (≈ 57 Mio par worker Node).
 
-1. Construire le binaire Linux, le déposer à côté (sans rien arrêter) ; lancer
-   `sniperbot_analyst --headless --port 23090 --bridge 3011` sur le workspace OverMind.
+1. Déposer le binaire Linux à côté (sans rien arrêter), le copier sous le nom de l'agent Discord
+   et le lancer `--headless --port 23090 --bridge 3011` sur le workspace OverMind.
 2. Tester au `curl` (`/health`, `/send` vers un salon de test, `/reset`).
-3. **Mémoire** : la SOUL appelle `memory_search` / `memory_store` d'overmind-mcp ; garder
-   overmind-mcp pour la mémoire au début (déjà dans la config MCP du profil).
-4. Basculer `!sniper` de `discord-master` vers le port 3011, observer, puis arrêter le worker Node
-   (`discord-llm.service`). **Modifications du serveur : chacune validée avant.**
+3. **Mémoire** : garder overmind-mcp :3099 pour `memory_search` / `memory_store` au début.
+4. Basculer le préfixe de `discord-master` vers :3011, observer, puis arrêter
+   `discord-llm.service`. **Chaque modification du serveur validée avant.**
 5. Répéter pour `trade2`…`trade7`, puis remplacer `discord-master` par un routeur Rust (crate à
-   part : Discord exige un runtime async, que la lib n'embarque pas).
+   part : Discord exige un runtime async).
 
 ## 7. Limites assumées
 
