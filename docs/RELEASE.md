@@ -55,7 +55,9 @@ git push origin v0.2.0
 ## Binaires et logo docs.rs
 
 Chaque release joint cinq archives (`.tar.gz`, ou `.zip` sous Windows) et leur `.sha256`,
-nommées `swarm-control-vX.Y.Z-<cible>` :
+nommées `swarm-control-vX.Y.Z-<cible>`, plus les cinq **exécutables nus** —
+`swarm-control-vX.Y.Z-<cible>[.exe]` — et leur `.sha256` : téléchargement direct,
+sans extraction :
 
 | Cible | Runner | Note |
 |---|---|---|
