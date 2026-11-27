@@ -180,3 +180,8 @@ Le code est découpé en petits fichiers classés par couche : voir [docs/ARCHIT
 ## Licence
 
 MIT OU Apache-2.0, au choix.
+
+<div align="center">
+  <br />
+  <img src="assets/logo-256.png" alt="Logo swarm-control : un frelon cybernétique" width="128" />
+</div>

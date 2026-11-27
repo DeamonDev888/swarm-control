@@ -1,5 +1,7 @@
 //! # swarm-control
 //!
+//! ![swarm-control](https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/hornet-pixel-banner-4k.png)
+//!
 //! Agents IA persistants (Claude Code, Hermes) pilotés par MCP, servis par
 //! [LiteMCP](https://crates.io/crates/litemcp).
 //!
@@ -26,6 +28,10 @@
 //! | `cli`       | ligne de commande                                             |
 
 #![forbid(unsafe_code)]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/logo-256.png",
+    html_favicon_url = "https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/favicon-64.png"
+)]
 
 mod agents;
 mod binaries;

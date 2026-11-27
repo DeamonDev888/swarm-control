@@ -7,6 +7,14 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ## [Unreleased]
 
+### Ajouté
+- Logo en pied du README (visible sur crates.io), logo et icône d'onglet sur docs.rs,
+  bannière en tête de la documentation.
+
+### Corrigé
+- Unix : un PID hors bornes (0 ou au-delà de `i32::MAX`, relu par `kill` comme `-1`) était vu
+  vivant par `pid_alive` et pouvait être visé par `kill_tree` ; il est désormais ignoré.
+
 ## [0.1.0] - 2026-11-26
 
 Première version.
