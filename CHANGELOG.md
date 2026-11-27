@@ -11,14 +11,34 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 - **Un exécutable par agent** : le binaire copié sous le nom d'un agent (`sniper`, `sniper.exe`),
   ou lancé avec `--agent NAME`, ne sert que cet agent (serveur MCP `swarm-<agent>`, file,
   session), sans serveur d'administration. `--port` fixe le port de son serveur MCP.
-  `swarm_control::serve_agent("nom")` sert de `main` à un crate d'agent.
+  `swarm_control::serve_agent("nom")` sert de `main` à un crate d'agent, et `create_agent`
+  peut matérialiser l'exécutable dédié.
 - **Pont HTTP compatible `overmind-bridge`** (`--bridge N`, mode agent) : `POST /send`
   (contexte `[DISCORD CONTEXT]`, réponse `{result, session_id}`, vide si l'agent a posté via
   MCP), `POST /reset`, `GET /status`, `GET /health` — un routeur Discord Node existant n'a qu'à
   changer de port. Les demandes passent par la file de l'agent.
+- **Runner Antigravity (`agy`)** : création, configuration, liste et exécution d'agents via le
+  CLI Antigravity en complément de Claude Code et Hermes.
+- **CLI complète & TUI (`ratatui`)** : sous-commandes `serve`, `ask`, `status`, `history`,
+  `reset`, `config`, `schema`, `agents`, `run`, `runs`, `doctor`, mode `--debug`, et interface
+  terminal interactive (feature `tui` activée par défaut, désactivable en bibliothèque via
+  `default-features = false`).
+- **Agents résidents enrichis, historique & découverte de pairs** : journal rotatif des tours
+  (`bridge/history/…jsonl`), outils MCP d'inspection (`history`, `logs`, `config`, `session`),
+  découverte des pairs `swarm-*` et authentification serveur optionnelle.
+- **Identité visuelle SVG animée** : bannière frelon cybernétique animée, console MCP
+  multi-agents en direct et 6 classes d'agents (`Coordinator`, `Coder`, `Explorer`, `Verifier`,
+  `Browser`, `Monitor`) compatibles GitHub, crates.io et docs.rs.
+
+- **Installation en une ligne** depuis l'exécutable publié : `install.ps1` (Windows, sans droits
+  administrateur, ajout au PATH utilisateur) et `install.sh` (Linux / macOS, `~/.local/bin`).
+- README réécrit pour les débutants : installation, premiers pas, glossaire, interface terminal,
+  dépannage.
 
 ### Corrigé
+- Message d'erreur de `serve --bridge` sans agent : espaces parasites retirés.
 - Test `control` instable : l'état disque d'un run tué est attendu au lieu d'être lu aussitôt.
+- Durcissement de la gestion des baux (`owners`) et de la détection de processus vivants.
 
 ## [0.1.1] - 2026-11-27
 

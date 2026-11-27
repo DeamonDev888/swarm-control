@@ -37,19 +37,43 @@ pub fn acquire_host(ws: &Path, runner: &str, agent: &str, token: &str) -> Result
 /// Bail générique : le fichier `file` (dans `dir`) pour `holder`, avec les mêmes règles
 /// d'exclusivité et de péremption que les baux d'agent.
 pub fn acquire_at(dir: &Path, file: &Path, holder: Holder) -> Result<Lease, Busy> {
-    std::fs::create_dir_all(dir).map_err(|e| Busy::Io(e.to_string()))?;
+    std::fs::create_dir_all(dir).map_err(|e| {
+        crate::debug!("bail ✗ {} · dossier inutilisable: {e}", file.display());
+        Busy::Io(e.to_string())
+    })?;
     for _ in 0..ATTEMPTS {
         match try_create(file, &holder) {
-            Ok(()) => return Ok(Lease::new(file.to_path_buf(), holder.run_id.clone())),
+            Ok(()) => {
+                crate::debug!("bail pris {} · {}", file.display(), holder.run_id);
+                return Ok(Lease::new(file.to_path_buf(), holder.run_id.clone()));
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
-            Err(e) => return Err(Busy::Io(e.to_string())),
+            Err(e) => {
+                crate::debug!("bail ✗ {} · {e}", file.display());
+                return Err(Busy::Io(e.to_string()));
+            }
         }
         match holder::read(file) {
-            Some(h) if !h.is_stale(now_ms()) => return Err(Busy::Held(Box::new(h))),
-            None if holder::is_young(file) => return Err(Busy::Pending),
-            _ => takeover::remove_if_stale(file),
+            Some(h) if !h.is_stale(now_ms()) => {
+                crate::debug!(
+                    "bail refusé {} · détenu par {} (pid {})",
+                    file.display(),
+                    h.instance,
+                    h.pid
+                );
+                return Err(Busy::Held(Box::new(h)));
+            }
+            None if holder::is_young(file) => {
+                crate::debug!("bail en cours de création {} · réessai", file.display());
+                return Err(Busy::Pending);
+            }
+            _ => {
+                crate::debug!("bail périmé {} · reprise", file.display());
+                takeover::remove_if_stale(file);
+            }
         }
     }
+    crate::debug!("bail ✗ {} · toujours en attente après {ATTEMPTS} essais", file.display());
     Err(Busy::Pending)
 }
 

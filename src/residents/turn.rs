@@ -10,6 +10,8 @@ pub struct Turn {
     pub prompt: String,
     /// Qui demande (un pair), pour la traçabilité.
     pub from: Option<String>,
+    /// Chaîne des agents déjà traversés (outil `ask`), journalisée avec le tour.
+    pub via: Vec<String>,
     pub model: Option<String>,
     pub enqueued: Instant,
     /// Levé par l'appelant qui renonce : le tour est alors ignoré s'il n'a pas démarré.
@@ -29,10 +31,21 @@ impl Turn {
         from: Option<String>,
         model: Option<String>,
     ) -> (Turn, Receiver<TurnOutcome>) {
+        Self::with_via(prompt, from, model, Vec::new())
+    }
+
+    /// Comme [`Turn::new`], en conservant la chaîne `via` demandée par un pair.
+    pub fn with_via(
+        prompt: String,
+        from: Option<String>,
+        model: Option<String>,
+        via: Vec<String>,
+    ) -> (Turn, Receiver<TurnOutcome>) {
         let (reply, outcome) = mpsc::channel();
         let turn = Turn {
             prompt,
             from,
+            via,
             model,
             enqueued: Instant::now(),
             cancelled: Arc::new(AtomicBool::new(false)),

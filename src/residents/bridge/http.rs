@@ -14,7 +14,17 @@ pub struct Request {
     pub method: String,
     /// Chemin sans la query (`/send`).
     pub path: String,
+    /// En-têtes, noms en minuscules.
+    pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+}
+
+impl Request {
+    /// Valeur d'un en-tête (nom insensible à la casse).
+    pub fn header(&self, name: &str) -> Option<&str> {
+        let name = name.to_ascii_lowercase();
+        self.headers.iter().find(|(n, _)| *n == name).map(|(_, v)| v.as_str())
+    }
 }
 
 /// Lit une requête. L'erreur porte le statut HTTP à renvoyer et son message.
@@ -44,9 +54,11 @@ pub fn read(stream: &mut TcpStream) -> Result<Request, (u16, String)> {
     let path = target.split('?').next().unwrap_or_default().to_string();
 
     let mut length = 0usize;
+    let mut headers = Vec::new();
     for line in lines {
         let Some((name, value)) = line.split_once(':') else { continue };
         let name = name.trim().to_ascii_lowercase();
+        headers.push((name.clone(), value.trim().to_string()));
         if name == "content-length" {
             length =
                 value.trim().parse().map_err(|_| (400, "Content-Length invalide".to_string()))?;
@@ -65,7 +77,7 @@ pub fn read(stream: &mut TcpStream) -> Result<Request, (u16, String)> {
         }
     }
     body.truncate(length);
-    Ok(Request { method, path, body })
+    Ok(Request { method, path, headers, body })
 }
 
 /// Écrit une réponse JSON et ferme la connexion (`Connection: close`).
@@ -100,4 +112,50 @@ fn reason(status: u16) -> &'static str {
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+/// Le client a-t-il fermé la connexion ? Lecture non bloquante d'un octet (sans le consommer) :
+/// `Ok(0)` = fin de flux. Ne touche pas au délai de lecture courant.
+pub fn client_gone(stream: &mut TcpStream) -> bool {
+    let previous = stream.read_timeout().ok().flatten();
+    if stream.set_nonblocking(true).is_err() {
+        return false;
+    }
+    let mut byte = [0u8; 1];
+    let gone = match stream.peek(&mut byte) {
+        Ok(0) => true,
+        Ok(_) => false,
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => false,
+        Err(_) => true,
+    };
+    let _ = stream.set_nonblocking(false);
+    if let Some(delay) = previous {
+        let _ = stream.set_read_timeout(Some(delay));
+    }
+    gone
+}
+
+#[cfg(test)]
+mod tests {
+    use super::client_gone;
+    use std::net::{TcpListener, TcpStream};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn sees_a_client_close_and_keeps_a_live_one() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = TcpStream::connect(addr).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        assert!(!client_gone(&mut server), "client connecté");
+        drop(client);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if client_gone(&mut server) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!("fermeture du client non détectée");
+    }
 }

@@ -2,10 +2,10 @@
 
 use crate::harness::start;
 use crate::resident::eventually;
-use crate::rpc::{call_at, ok, ok_at, port_of};
+use crate::rpc::{call_at, lease_file, ok, ok_at, port_of};
 use serde_json::{Value, json};
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Démarre un serveur, crée l'agent `alice` résident, rend (serveur, port de l'agent).
 fn resident_alice() -> (crate::harness::Harness, u16) {
@@ -88,8 +88,12 @@ fn ask_waits_for_an_on_demand_run_instead_of_failing() {
     std::thread::spawn(move || {
         let _ = tx.send(call_at(port, "ask", json!({"prompt": "attends ton tour"})));
     });
-    // Tant que le run à la demande tient le bail, la demande patiente (sans échouer).
-    assert!(done.recv_timeout(Duration::from_secs(1)).is_err(), "la demande aurait dû attendre");
+    // Tant que le run à la demande tient le bail, la demande patiente (sans échouer ni répondre).
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while lease_file(&h.ws, "claude", "alice").exists() && Instant::now() < deadline {
+        assert!(done.try_recv().is_err(), "la demande aurait dû attendre la fin du run");
+        std::thread::sleep(Duration::from_millis(50));
+    }
 
     ok(&h, "agent_control", json!({"action": "kill", "agentName": "alice"}));
     let (is_error, reply) = done.recv_timeout(Duration::from_secs(20)).expect("la demande reprend");
@@ -107,8 +111,18 @@ fn an_ask_that_times_out_is_cancelled_before_it_starts() {
         call_at(port, "ask", json!({"prompt": "trop tard", "timeoutMs": 1000}));
     assert!(is_error && message.to_string().contains("pas de réponse"), "{message}");
     running.join().unwrap();
-    // Annulé avant son démarrage : il n'a jamais été exécuté (un seul tour compté).
-    assert!(eventually(5, || state_of(port)["queueLength"] == 0));
-    std::thread::sleep(Duration::from_millis(600));
-    assert_eq!(state_of(port)["turnsDone"], 1, "la demande annulée ne doit pas s'exécuter");
+    // Annulé avant son démarrage : il n'a jamais été exécuté. On attend le retour au repos
+    // (fin du 1er tour, tour annulé écarté), puis on lance un tour frais : le compteur final
+    // prouve qu'aucun tour supplémentaire n'a été exécuté entre-temps.
+    assert!(
+        eventually(10, || {
+            let state = state_of(port);
+            state["state"] == "idle" && state["queueLength"] == 0
+        }),
+        "l'agent ne revient pas au repos : {}",
+        state_of(port)
+    );
+    let after = ok_at(port, "ask", json!({"prompt": "encore"}));
+    assert!(after["reply"].as_str().unwrap().contains("echo:encore"), "{after}");
+    assert_eq!(state_of(port)["turnsDone"], 2, "la demande annulée ne doit pas s'exécuter");
 }

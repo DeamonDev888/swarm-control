@@ -32,6 +32,9 @@ const MAX_CONNECTIONS: usize = 64;
 /// Ouvre le pont de l'agent résident `agent` sur `addr` (`host:port`) et rend l'adresse
 /// réellement liée (port `0` = éphémère).
 pub fn open(runner: Runner, agent: &str, addr: &str) -> Result<SocketAddr, String> {
+    let token = crate::server::token();
+    let host = addr.rsplit_once(':').map_or(addr, |(host, _)| host);
+    crate::server::check_exposure(host, token.as_deref())?;
     let host = table::find(agent, Some(runner))
         .pop()
         .ok_or_else(|| format!("l'agent '{agent}' n'est pas résident dans ce process"))?;
@@ -72,7 +75,7 @@ fn accept_loop(ctx: &Arc<Ctx>, listener: &TcpListener) {
 
 fn serve_one(ctx: &Ctx, mut stream: TcpStream) {
     let (status, body) = match http::read(&mut stream) {
-        Ok(request) => routes::handle(ctx, &request),
+        Ok(request) => routes::handle(ctx, &request, &mut stream),
         Err((status, message)) => (status, json!({"error": message})),
     };
     http::respond(&mut stream, status, &body);

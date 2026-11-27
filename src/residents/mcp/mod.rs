@@ -5,9 +5,17 @@
 //! | `ask`    | met un tour dans la file de l'agent et rend sa réponse |
 //! | `status` | file, tour en cours, session, dernier tour             |
 //! | `stop`   | tue le tour en cours (et vide la file si demandé)      |
+//! | `history`| les derniers tours, lus dans le journal                |
+//! | `session`| voir / oublier / forcer la session                     |
+//! | `logs`   | fin de la sortie du dernier tour                       |
+//! | `config` | fichiers de configuration (secrets masqués)            |
 
 mod ask;
 mod chain;
+mod config;
+mod history;
+mod logs;
+mod session;
 mod status;
 mod stop;
 
@@ -18,5 +26,9 @@ use std::sync::Arc;
 pub fn register(builder: ServerBuilder, ctx: Arc<Ctx>) -> ServerBuilder {
     let builder = ask::register(builder, Arc::clone(&ctx));
     let builder = status::register(builder, Arc::clone(&ctx));
+    let builder = history::register(builder, Arc::clone(&ctx));
+    let builder = session::register(builder, Arc::clone(&ctx));
+    let builder = logs::register(builder, Arc::clone(&ctx));
+    let builder = config::register(builder, Arc::clone(&ctx));
     stop::register(builder, ctx)
 }

@@ -20,6 +20,8 @@ pub struct Ctx {
     pub(super) current: Mutex<Option<Current>>,
     pub(super) last: Mutex<Option<Last>>,
     pub(super) turns_done: AtomicU64,
+    /// Fin de la sortie brute du dernier tour (outil `logs`, panneau de la TUI).
+    pub(super) last_output: Mutex<String>,
     /// Reset demandé pendant un tour : la session sera oubliée à sa fin (sinon le tour la
     /// réécrirait en se terminant).
     pub(super) reset_after_turn: AtomicBool,
@@ -38,6 +40,7 @@ impl Ctx {
             current: Mutex::new(None),
             last: Mutex::new(None),
             turns_done: AtomicU64::new(0),
+            last_output: Mutex::new(String::new()),
             reset_after_turn: AtomicBool::new(false),
         }
     }
@@ -57,6 +60,15 @@ impl Ctx {
 
     pub fn stopping(&self) -> bool {
         self.stopping.load(Ordering::SeqCst)
+    }
+
+    /// Fin de la sortie du dernier tour (ou du tour en cours), pour `logs` et la TUI.
+    pub fn last_output(&self) -> String {
+        self.last_output.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    pub(super) fn set_output(&self, tail: String) {
+        *self.last_output.lock().unwrap_or_else(|e| e.into_inner()) = tail;
     }
 
     /// Met un tour dans la file. Refusé si l'agent s'arrête.

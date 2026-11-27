@@ -3,13 +3,23 @@
 use super::info::AgentInfo;
 use crate::agents::Runner;
 use crate::agents::name::validate_name;
-use crate::agents::paths::{antigravity_agents_dir, antigravity_settings_path};
+use crate::agents::paths::{
+    antigravity_agents_dir, antigravity_profile_prompt_path, antigravity_settings_path,
+    profiles_root,
+};
 use crate::config;
 use crate::store::read_json;
 use serde_json::Value;
 use std::path::Path;
 
 pub fn scan(ws: &Path) -> Vec<AgentInfo> {
+    let mut out = scan_legacy(ws);
+    out.extend(scan_profiles(ws));
+    out
+}
+
+/// Agents sur l'emplacement historique partagé : `.antigravity/agents/*.md`.
+fn scan_legacy(ws: &Path) -> Vec<AgentInfo> {
     let Ok(entries) = std::fs::read_dir(antigravity_agents_dir(ws)) else {
         return Vec::new();
     };
@@ -22,6 +32,30 @@ pub fn scan(ws: &Path) -> Vec<AgentInfo> {
                 return None;
             }
             let prompt_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            Some(describe(ws, name, prompt_bytes))
+        })
+        .collect()
+}
+
+/// Agents en profil dédié : `agents/<nom>/.antigravity/agents/<nom>.md`.
+/// Le nom vient du dossier du profil ; sans prompt dédié, ce n'est pas un
+/// agent Antigravity (restes de suppression, profil d'un autre runner).
+fn scan_profiles(ws: &Path) -> Vec<AgentInfo> {
+    let Ok(entries) = std::fs::read_dir(profiles_root(ws)) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            if !entry.file_type().ok()?.is_dir() {
+                return None;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if validate_name(&name).is_err() {
+                return None;
+            }
+            let prompt = antigravity_profile_prompt_path(ws, &name);
+            let prompt_bytes = std::fs::metadata(&prompt).ok()?.len();
             Some(describe(ws, name, prompt_bytes))
         })
         .collect()

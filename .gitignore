@@ -1,5 +1,7 @@
-# Build
+# Build & traces locales
 /target
+/work
+*.log
 
 # Secrets locaux
 .env

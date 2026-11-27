@@ -27,6 +27,15 @@ pub fn execute(req: &RunRequest, live: &Arc<LiveRun>, cancel: Option<&CancelToke
 
 fn cycle(req: &RunRequest, live: &Arc<LiveRun>, cancel: Option<&CancelToken>) -> RunResult {
     let resume = resume_id(req);
+    crate::debug!(
+        "run {} ({}): {}",
+        who(req),
+        req.runner.as_str(),
+        match &resume {
+            Some(id) => format!("reprise de la session {id}"),
+            None => "session neuve".to_string(),
+        }
+    );
     let mut result = attempt(req, live, resume.as_deref(), cancel);
     if resume.is_some() && session::is_dead(&result) && !live.kill_requested() {
         forget_session(req);
@@ -39,6 +48,10 @@ fn cycle(req: &RunRequest, live: &Arc<LiveRun>, cancel: Option<&CancelToken>) ->
         Outcome { result: result.result.clone(), error: result.error.clone() },
     );
     result
+}
+
+fn who(req: &RunRequest) -> &str {
+    req.agent.as_deref().unwrap_or("(sans agent)")
 }
 
 /// Session à reprendre : explicite, sinon la dernière de l'agent (`autoResume`).
@@ -56,15 +69,38 @@ fn attempt(
     resume: Option<&str>,
     cancel: Option<&CancelToken>,
 ) -> RunResult {
-    match req.runner {
+    let started = std::time::Instant::now();
+    crate::debug!(
+        "run {} ({}): tentative avec {}",
+        who(req),
+        req.runner.as_str(),
+        resume.unwrap_or("une nouvelle session")
+    );
+    let result = match req.runner {
         Runner::Claude => claude::run(req, live, resume, cancel),
         Runner::Hermes => hermes::run(req, live, resume, cancel),
         Runner::Antigravity => antigravity::run(req, live, resume, cancel),
+    };
+    match &result.error {
+        Some(error) => crate::debug!(
+            "run {} ({}): échec en {} ms · {error}",
+            who(req),
+            req.runner.as_str(),
+            started.elapsed().as_millis()
+        ),
+        None => crate::debug!(
+            "run {} ({}): ok en {} ms",
+            who(req),
+            req.runner.as_str(),
+            started.elapsed().as_millis()
+        ),
     }
+    result
 }
 
 fn forget_session(req: &RunRequest) {
     if let Some(agent) = &req.agent {
+        crate::debug!("run {agent} ({}): session morte oubliée", req.runner.as_str());
         sessions::delete(&req.workspace, req.runner.as_str(), agent);
     }
 }

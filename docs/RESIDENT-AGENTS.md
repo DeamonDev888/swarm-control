@@ -2,11 +2,14 @@
 
 > **Étapes 1 à 3 construites** (état par agent, bail inter-process, agents résidents : serveur
 > propre, file, `ask` / `status` / `stop`, annonce ; instances numérotées `swarm-control-N` et
-> routage des runs vers l'hôte — voir §3 et §6). **Le reste est une proposition, non
-> construite** (exécutable par agent, pairs automatiques). Décidée le 2026-11-26 : les agents
+> routage des runs vers l'hôte — voir §3 et §7), et le **mode agent** construit lui aussi :
+> exécutable par agent et pont HTTP `--bridge` (§4, `main` 4a2d1cf). **Restent des propositions,
+> non construites** : les pairs automatiques et le champ `executable` de `create_agent`.
+> Décidée le 2026-11-26 : les agents
 > sont **résidents**, et l'architecture accepte **plusieurs instances**.
 > Les formats d'annonce (`litemcp-registry`) sont ceux de LiteMCP. Construits : `ask`, `status`,
-> `stop`, `agent_start`, `agent_stop`, `--instance`. **À construire** : `peers`, le champ `executable`.
+> `stop`, `agent_start`, `agent_stop`, `--instance`, le mode agent (`--agent` / binaire renommé,
+> `--port`, `serve_agent()`) et le pont `--bridge`. **À construire** : `peers`, le champ `executable`.
 
 ## 1. Trois objets
 
@@ -17,7 +20,8 @@
 | **Pair** | un autre agent résident, retrouvé par le registre LiteMCP | `%TEMP%/litemcp-registry/swarm-*.json` |
 
 Un exécutable = le même binaire sous un autre nom : `alice.exe` lancé sans argument sert l'agent
-`alice` (le nom du fichier sert d'identité) ; `swarm-control` seul peut en héberger plusieurs.
+`alice` (le nom du fichier sert d'identité — mode agent et pont détaillés au §4) ;
+`swarm-control` seul peut en héberger plusieurs.
 
 ```
 client MCP ─▶ swarm-control-1 (admin :23080)             swarm-control-2 (admin :23081)
@@ -74,7 +78,57 @@ struct AgentHost {            // une entrée par agent résident, dans l'instanc
 5. **Découverte** : liste des `swarm-*.json` du registre (champs LiteMCP : `name, port, pid, instance,
    exe, args, cwd, ts`) ; le balayeur anti-zombie de LiteMCP retire les annonces mortes.
 
-## 4. Payloads
+## 4. Le mode agent et son pont HTTP *(✅ construit — `main` 4a2d1cf)*
+
+Le même binaire, identifié par son **nom de fichier** ou par `--agent NAME`, ne sert qu'**un
+seul agent résident** : son serveur MCP (`swarm-<agent>`, outils `ask` / `status` / `stop`), sa
+file, sa session — et **pas de serveur d'administration** (aucun des 10 outils). `--resident` y
+est refusé (un agent par process) ; `--port N` fixe le port d'écoute (défaut : premier libre de
+23080..=23099), sur le même `--host` que le MCP.
+
+Trois façons équivalentes de l'obtenir :
+
+```bash
+cp swarm-control sniper && ./sniper --port 23090 --bridge 3001 --workspace ~/.swarm-control
+swarm-control --agent sniper --port 23090 --bridge 3001 --workspace ~/.swarm-control  # sans renommer (unit systemd)
+```
+
+```rust
+// depuis un crate qui dépend de swarm-control (`fn main() -> ExitCode`) :
+swarm_control::serve_agent("sniper")
+```
+
+`--agent` garde la priorité sur le nom du fichier. La bannière reprend celle d'une instance,
+avec le pont en plus :
+
+```text
+swarm-sniper 0.2.0 — MCP sur http://127.0.0.1:23090/mcp  (agent: sniper, runner: hermes, workspace: …) · pont HTTP sur http://127.0.0.1:3001
+```
+
+### Le pont HTTP `--bridge N`
+
+Compatible avec l'`overmind-bridge` Node (worker Discord d'un agent) : un routeur existant n'a
+qu'à changer de port. HTTP/1.1 minimal en `std`, une requête par connexion, 64 connexions
+servies en même temps (au-delà : `503`).
+
+| Route | Requête → réponse |
+|---|---|
+| `POST /send` | `{message, userId, username, channelId}` → le message devient le bloc `[DISCORD CONTEXT]` habituel, mis dans la **file** de l'agent (un tour à la fois, même session) → `{result, session_id}` ; `result` est **vide** si l'agent a déjà posté sur Discord lui-même via ses outils MCP |
+| `POST /reset` | → oublie la session : le prochain message repart à neuf (sûr même pendant un tour) → `{ok, agent, hadSession}` |
+| `GET /status` | → état de l'agent, celui de l'outil MCP `status` (idle / busy, file, tour en cours, session) |
+| `GET /health` | → sonde de vie : `{status:"ok", agent}` |
+
+`/send` attend la fin du tour jusqu'à une heure ; si le client HTTP se déconnecte, la demande
+est annulée tant qu'elle n'a pas démarré ; au-delà du délai : `504`. Un message sans `username`
+ni `channelId` est passé brut, hors contexte Discord.
+
+**Jeton partagé** (`SWARM_TOKEN`, lu dans l'environnement ou `.env`) : posé, il protège toutes
+les routes sauf `/health` (`Authorization: Bearer …`, comparaison à durée constante) — les
+routeurs externes doivent l'envoyer, comme le fait déjà le client `peers` en interne. Sans
+jeton, l'écoute reste en **loopback** : toute écoute sur une autre interface est refusée au
+démarrage.
+
+## 5. Payloads
 
 ### `create_agent` (instance 1, admin)
 ```json
@@ -123,7 +177,7 @@ Claude le reçoit par `--mcp-config` (déjà le cas pour ses serveurs) ; Hermes 
 `config.yaml` (déjà écrit par `agents/hermes/mcp.rs`). Son modèle appelle alors `swarm-bob.ask(…)`
 comme n'importe quel outil.
 
-## 5. Risques et questions ouvertes
+## 6. Risques et questions ouvertes
 
 | Risque | Parade prévue |
 |---|---|
@@ -134,7 +188,7 @@ comme n'importe quel outil.
 | **Ports** : tranche par défaut = 20 | repli éphémère de LiteMCP ; l'annonce publie le port réel |
 | Runners sans configuration MCP injectable (opencode, Kilo, Cline, OpenClaw) | pairs joignables par `ask` côté orchestrateur ; injection au cas par cas, à vérifier runner par runner |
 
-## 6. Étapes testables (de bout en bout, faux CLI d'abord)
+## 7. Étapes testables (de bout en bout, faux CLI d'abord)
 
 1. ✅ **État par agent** + verrou de propriété (sans résidence encore) ; `agents.json` reste lu en
    repli. Construit et testé : 16 acquéreurs simultanés → un seul gagnant (bail frais ou laissé
@@ -148,5 +202,8 @@ comme n'importe quel outil.
    l'hôte, mode à la demande en repli. Testé de bout en bout : numéros distincts et annonces,
    numéro explicite déjà pris refusé, `run_agent` reçu par B exécuté par l'hôte A avec session
    partagée, cas qui restent locaux, tâches parallèles routées.
-4. **Exécutable par agent** : création du binaire nommé, identité lue dans le nom du fichier.
+4. *(✅ mode construit, §4)* **Exécutable par agent** : binaire renommé ou `--agent`,
+   `serve_agent()`, pont `--bridge` (construit dans `main`, 4a2d1cf). Reste à construire : la
+   fabrication par `create_agent {executable:true}` (copie dans `<workspace>/bin/`, chemin
+   rendu, `delete_agent` le retire).
 5. **Pairs** : découverte, injection dans la configuration MCP, anti-cycle.

@@ -34,6 +34,7 @@ impl RunArgs {
             agent: self.agent_name.clone(),
             session_id: self.session_id.clone(),
             // Agent nommé = agent persistant : on reprend sa session sauf demande contraire.
+            // Sans agentName : agent éphémère — un tour, aucune session relue ni gardée.
             auto_resume: self.auto_resume.unwrap_or(self.agent_name.is_some()),
             model: self.model.clone(),
             provider: self.provider.clone(),

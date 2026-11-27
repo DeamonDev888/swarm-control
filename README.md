@@ -13,214 +13,451 @@
 
 <br />
 
-**Instancie des agents IA persistants via LiteMCP, en Rust.**
+**Des agents IA qui se souviennent, tournent en continu et se parlent entre eux.**
+Un seul exécutable de 2 Mio, rien d'autre à installer.
 
-Chaque agent créé = **1 profil et 1 exécutable** — il vit, se souvient et communique avec ses pairs.
-Compatible **Hermes** (natif), **Claude Code**, **Antigravity**, **grokbot**, **opencode**, **Kilo / Cline**, **OpenClaw**,
-et extensible à tout runner CLI.
-
-> **Statut 0.1.0** — disponible : Hermes et Claude Code, sessions persistantes, orchestration, **agents résidents** (serveur MCP propre, file de demandes, `ask`), 10 outils MCP, un binaire de 2 Mio.
-> En construction : un exécutable par agent, les pairs qui se retrouvent et s'appellent tout seuls, les autres runners — voir la [feuille de route](#feuille-de-route).
-
-[Démarrage](#démarrage-rapide) · [Outils](#les-10-outils) · [Résidents](#agents-résidents) · [Persistance](#comment-un-agent-reste-persistant) · [Légèreté](#léger-mesuré) · [Concurrence](#face-à-la-concurrence) · [Feuille de route](#feuille-de-route) · [Architecture](docs/ARCHITECTURE.md) · [Publication](docs/RELEASE.md)
+[Installer](#1-installer) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-10-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
 
 </div>
 
 ---
 
-## Pourquoi
+## C'est quoi ?
 
-Lancer `claude -p` ou `hermes chat` à la main perd tout entre deux appels. `swarm-control` en fait des **agents** :
+Quand vous lancez `claude -p "…"` ou `hermes chat`, l'IA **oublie tout** dès que la commande se termine.
+`swarm-control` transforme ces outils en **agents** :
 
-- **Persistants** — un agent nommé reprend sa dernière session (`--resume`) à chaque appel et sauvegarde la nouvelle. Si la session a disparu, elle est oubliée et l'agent repart à neuf, une seule fois.
-- **Orchestrés** — jusqu'à 10 agents en parallèle, runs en arrière-plan, statut, sortie en direct, `wait`, `kill` de l'arbre de processus, balayage des orphelins.
-- **MCP natif** — c'est un serveur MCP (Streamable HTTP sans état, spec `2026-07-28`, via [LiteMCP](https://crates.io/crates/litemcp)). Un agent peut donc en piloter d'autres : Claude Code appelle `run_agent` comme n'importe quel outil.
-- **Typé** — chaque outil publie un **JSON Schema** (DSL à la Zod de LiteMCP) ; les arguments sont validés avant d'atteindre le handler (`-32602` avec la liste des problèmes).
+| | Sans swarm-control | Avec swarm-control |
+|---|---|---|
+| Mémoire | perdue à chaque appel | l'agent **reprend sa conversation** à chaque fois |
+| Plusieurs IA | à lancer à la main, une par une | jusqu'à **10 agents en parallèle**, suivis et arrêtables |
+| Toujours en ligne | non | un agent peut rester **résident 24/7** (Discord, WhatsApp, X, Google…) |
+| Piloter depuis une IA | non | Claude Code peut **créer et commander** d'autres agents |
 
-## Archétypes d'agents
-
-Exemples de spécialisations que tu peux créer avec `create_agent` et orchestrer en parallèle via `run_agents_parallel` :
-
-<div align="center">
-  <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — Bus MCP multi-agents en direct" width="880" />
-</div>
-
-### Classe « Persistant uniquement » (Discord, WhatsApp & Custom)
-
-Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà de **Discord** (`--bridge` HTTP & MCP) et **WhatsApp**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
+Il fonctionne avec les outils d'IA en ligne de commande que vous avez déjà :
+**Claude Code** (`claude`), **Hermes** (`hermes`) et **Antigravity** (`agy`). D'autres arrivent (opencode, Kilo, Cline, OpenClaw…).
 
 <div align="center">
-  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp et Custom" width="880" />
+  <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — plusieurs agents qui travaillent en parallèle" width="880" />
 </div>
 
-## Démarrage rapide
+### Les mots à connaître
 
-```bash
-cargo install swarm-control          # ou : cargo run --release
-swarm-control --workspace ~/.swarm-control
-# swarm-control 0.1.0 — MCP sur http://127.0.0.1:23080/mcp  (workspace: …)
+| Mot | En clair |
+|---|---|
+| **Agent** | Une IA avec un nom (`architecte`, `sniper`…), une personnalité (son *prompt*) et une mémoire. |
+| **Runner** | Le programme d'IA qui fait réellement le travail : `claude`, `hermes` ou `agy`. |
+| **Session** | La conversation de l'agent, sauvegardée sur disque et reprise à chaque appel. |
+| **Agent résident** | Un agent qui reste allumé et répond aux demandes au fil de l'eau, comme un bot. |
+| **MCP** | Le protocole standard qui permet à une IA (Claude Code, Cursor…) d'utiliser des outils. `swarm-control` est un serveur MCP. |
+| **Workspace** | Le dossier où tout est rangé (agents, sessions, journaux). Par défaut : `~/.swarm-control`. |
+
+---
+
+## 1. Installer
+
+### Le plus simple : l'exécutable tout prêt
+
+**Windows** — dans PowerShell :
+
+```powershell
+irm https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/install.ps1 | iex
 ```
 
-Port : premier libre de `23080..=23099`, ou `--port N`. Prérequis : le CLI `claude` et/ou `hermes` installé.
+**Linux / macOS** — dans un terminal :
 
-Côté client MCP :
+```bash
+curl -fsSL https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/install.sh | sh
+```
+
+Le script télécharge la dernière version, la place dans votre dossier utilisateur
+(`%LOCALAPPDATA%\Programs\swarm-control` ou `~/.local/bin`) et l'ajoute au `PATH`.
+**Aucun droit administrateur**, aucune dépendance. Relancez la même commande pour mettre à jour.
+
+<details>
+<summary><b>Je préfère télécharger le fichier à la main</b></summary>
+
+Prenez le fichier de votre système sur la [page des releases](https://github.com/DeamonDev888/swarm-control/releases/latest) :
+
+| Système | Fichier |
+|---|---|
+| Windows 64 bits | [`swarm-control-windows-x86_64.exe`](https://github.com/DeamonDev888/swarm-control/releases/latest/download/swarm-control-windows-x86_64.exe) |
+| Linux x86_64 | [`swarm-control-linux-x86_64`](https://github.com/DeamonDev888/swarm-control/releases/latest/download/swarm-control-linux-x86_64) |
+| Linux ARM (Raspberry Pi, VPS ARM) | [`swarm-control-linux-aarch64`](https://github.com/DeamonDev888/swarm-control/releases/latest/download/swarm-control-linux-aarch64) |
+| macOS Apple Silicon (M1, M2…) | [`swarm-control-macos-aarch64`](https://github.com/DeamonDev888/swarm-control/releases/latest/download/swarm-control-macos-aarch64) |
+| macOS Intel | [`swarm-control-macos-x86_64`](https://github.com/DeamonDev888/swarm-control/releases/latest/download/swarm-control-macos-x86_64) |
+
+Puis renommez-le `swarm-control` (`swarm-control.exe` sous Windows) et, sous Linux/macOS, rendez-le exécutable :
+
+```bash
+chmod +x swarm-control
+./swarm-control --version
+```
+
+Chaque version publie aussi des archives `.zip` / `.tar.gz` avec leur somme SHA-256.
+</details>
+
+<details>
+<summary><b>Avec Rust (cargo)</b></summary>
+
+```bash
+cargo install swarm-control
+```
+</details>
+
+### Vérifier que tout est prêt
+
+```bash
+swarm-control --version
+swarm-control doctor
+```
+
+`doctor` passe tout en revue et affiche `✓` ou `✗` pour chaque point : le workspace, les droits d'écriture,
+et **quels runners sont installés** (`claude`, `hermes`, `agy`). Il vous en faut **au moins un**.
+
+> Pas encore de runner ? Installez par exemple [Claude Code](https://docs.claude.com/fr/docs/claude-code) puis relancez `swarm-control doctor`.
+
+---
+
+## 2. Premiers pas
+
+### Étape 1 — Démarrer le serveur
+
+```bash
+swarm-control
+```
+
+Il affiche son adresse, par exemple `http://127.0.0.1:23080/mcp`. Laissez cette fenêtre ouverte.
+(Le port est le premier libre entre 23080 et 23099 ; `--port 23085` pour en imposer un.)
+
+### Étape 2 — Le brancher à Claude Code (ou tout client MCP)
+
+```bash
+claude mcp add --transport http swarm http://127.0.0.1:23080/mcp
+```
+
+Autres clients (Cursor, Claude Desktop, …) : ajoutez ceci à leur configuration MCP :
 
 ```json
 { "mcpServers": { "swarm": { "type": "http", "url": "http://127.0.0.1:23080/mcp" } } }
 ```
 
-Puis, depuis le client :
+### Étape 3 — Parler à vos agents
+
+Dans Claude Code, demandez simplement en français :
+
+> *« Crée un agent `architecte` avec le runner claude, c'est un architecte logiciel. Puis demande-lui un plan d'API. »*
+
+Claude utilisera tout seul les outils de `swarm-control` :
 
 ```text
 create_agent(name:"architecte", runner:"claude", prompt:"Tu es un architecte logiciel…")
-run_agent(runner:"claude", agentName:"architecte", prompt:"Propose un plan d'API")   # session créée
-run_agent(runner:"claude", agentName:"architecte", prompt:"Détaille l'étape 2")      # session reprise
-run_agent(runner:"claude", prompt:"Question ponctuelle")   # agent ÉPHÉMÈRE : un tour, rien de sauvegardé
+run_agent(runner:"claude", agentName:"architecte", prompt:"Propose un plan d'API")   ← session créée
+run_agent(runner:"claude", agentName:"architecte", prompt:"Détaille l'étape 2")      ← il se souvient
 ```
 
-## Les 10 outils
-
-| Outil | Rôle |
-|---|---|
-| `run_agent` | Lance un agent. Avec `agentName` : reprise de session automatique. **Sans `agentName` : agent éphémère** — un tour, aucune session gardée. `background:true` rend un `runId`. |
-| `run_agents_parallel` | Jusqu'à 10 agents en parallèle, runners mélangeables ; `waitAll:false` rend la main au premier succès. |
-| `agent_control` | `status` · `stream` (sortie en direct) · `wait` · `kill` · `list`. |
-| `agent_start` | Rend un agent **résident** : serveur MCP propre (`swarm-<agent>`), file de demandes, fil de travail. Rend son URL. |
-| `agent_stop` | Arrête un agent résident : tour tué, file vidée, serveur fermé, annonce retirée. |
-| `create_agent` | Claude : prompt + settings + MCP. Hermes : profil natif + `SOUL.md` (`cloneFrom` pour réutiliser les clés d'un profil). `resident:true` l'héberge aussitôt. `executable:true` copie le binaire courant en `<workspace>/bin/<agent>` ; `unit:true` (Linux) écrit en plus une unit systemd `--headless`, non activée. |
-| `list_agents` | Agents Claude et Hermes, état de session, run en cours, et l'URL de leur hôte s'ils sont résidents. |
-| `get_agent_configs` | Fichiers d'un agent, **secrets masqués**. |
-| `update_agent_config` | Modèle, serveurs MCP, variables, prompt — ou réécriture d'un fichier. |
-| `delete_agent` | Supprime l'agent et sa session, plus son exécutable et son unité dédiés s'ils existent ; refusé s'il tourne. |
-
-## Agents résidents
-
-Un agent **résident** est chargé en mémoire dans le process : il a son **propre serveur MCP**, annoncé dans le registre de LiteMCP sous `swarm-<agent>`, une **file de demandes** et **un fil de travail** qui les sert une par une, toujours sur la même session.
-
-```text
-agent_start(name:"alice")
-→ {"agent":"alice","name":"swarm-alice","url":"http://127.0.0.1:23082/mcp","instance":"swarm-control-1"}
-```
-
-Le serveur d'`alice` expose trois outils :
-
-| Outil | Rôle |
-|---|---|
-| `ask` | `{prompt, from?, via?, timeoutMs?, model?}` — met la demande dans la file, rend `{reply, sessionId, queuedMs, durationMs, via}`. Un **cycle** entre pairs (`via` contenant déjà l'agent) est refusé. |
-| `status` | idle / busy, longueur de la file, tour en cours (qui demande, depuis quand), session, dernier tour. |
-| `stop` | tue le tour en cours ; `clearQueue:true` annule aussi les demandes en attente. L'agent reste résident. |
-
-- **Un seul hôte par agent**, même entre plusieurs instances : un bail d'hébergement (`bridge/hosts/`) porte l'URL ; un second `agent_start` est refusé en disant où l'agent se trouve.
-- **Rien d'autre en RAM** que la file et l'état du tour : la conversation reste dans la session du CLI, relancé une fois par tour. Mesure : voir [Léger](#léger-mesuré).
-- Démarrage direct : `swarm-control --resident alice,bob`.
-- **Instances numérotées** : chaque `swarm-control` prend le premier numéro libre (`swarm-control-1`, `-2`…, ou `--instance N`), s'annonce sous ce nom et le porte comme hôte de ses agents. Un numéro pris est refusé.
-- **Routage** : `run_agent` / `run_agents_parallel` d'un agent résident sont **transmis à son hôte** (`ask`, quelle que soit l'instance qui reçoit l'appel) ; la réponse porte `routedTo`. Reste **local, à la demande** : agent sans hôte, hôte injoignable, `background:true`, ou run qui impose `sessionId`, `path`, `provider` ou `autoResume:false`.
-
-## Un exécutable par agent
-
-Copiez le binaire sous le nom d'un agent : lancé ainsi, il ne sert **que cet agent** (son serveur MCP `swarm-<agent>`, sa file, sa session), sans serveur d'administration.
+Vous pouvez aussi tout faire **depuis le terminal**, sans client MCP :
 
 ```bash
-cp swarm-control sniper            # Windows : copy swarm-control.exe sniper.exe
-./sniper --port 23090 --bridge 3001 --workspace ~/.swarm-control
-# swarm-sniper 0.2.0 — MCP sur http://127.0.0.1:23090/mcp  (agent: sniper, runner: hermes, …) · pont HTTP sur http://127.0.0.1:3001
+swarm-control agents                                  # liste vos agents
+swarm-control run architecte "Détaille l'étape 3"      # un tour, avec sa mémoire
+swarm-control runs                                    # ce qui tourne / a tourné
 ```
 
-- `--agent NAME` fait la même chose sans renommer (pratique dans une unit systemd) ; depuis un crate à vous : `fn main() -> ExitCode { swarm_control::serve_agent("sniper") }`.
-- **`--bridge N`** ouvre un pont HTTP compatible avec l'`overmind-bridge` Node (worker Discord) : un routeur existant n'a qu'à changer de port.
+---
+
+## 3. Un agent = un exécutable
+
+C'est la façon la plus simple de faire vivre un agent : **copiez l'exécutable sous le nom de l'agent**.
+Lancé ainsi, il ne sert que cet agent.
+
+```bash
+# Windows
+copy swarm-control.exe sniper.exe
+# Linux / macOS
+cp swarm-control sniper
+```
+
+Ensuite :
+
+```bash
+sniper                         # ouvre une interface terminal pour discuter avec l'agent
+sniper ask "état du marché ?"  # pose une question et affiche la réponse
+sniper status                  # occupé ? libre ? combien de demandes en attente ?
+sniper history                 # ses derniers échanges
+sniper reset                   # oublie la conversation : repart à zéro
+```
+
+> Pas envie de renommer ? `swarm-control --agent sniper` fait exactement la même chose.
+> Depuis Claude Code, `create_agent(…, executable:true)` crée cette copie pour vous dans `<workspace>/bin/`.
+
+### L'interface terminal
+
+| Touche | Action |
+|---|---|
+| Tapez + `Entrée` | envoie le message à l'agent |
+| `Échap` | efface le message en cours |
+| `↑` `↓` `PgUp` `PgDn` / molette | fait défiler la conversation · `Fin` revient en bas |
+| `r` | oublie la session (nouvelle conversation) |
+| `s` | arrête la réponse en cours |
+| `d` | affiche / masque le panneau debug |
+| `q` | quitte l'interface (l'agent continue) · `Ctrl-C` quitte **et** arrête l'agent |
+
+Les raccourcis à une lettre ne marchent que quand le champ de message est vide.
+
+### Agent permanent (serveur, bot Discord…)
+
+<div align="center">
+  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — agents persistants Discord, WhatsApp, X, Google et personnalisés" width="880" />
+</div>
+
+```bash
+sniper --headless --bridge 3001
+```
+
+- `--headless` : pas d'interface, l'agent attend les demandes (idéal en service ou sur un VPS).
+- `--bridge 3001` : ouvre un petit pont HTTP pour un bot externe (compatible avec le worker Discord `overmind-bridge`) :
 
 | Route | Rôle |
 |---|---|
-| `POST /send` | `{message, userId, username, channelId}` → l'agent reçoit le bloc `[DISCORD CONTEXT]` habituel → `{result, session_id}` (`result` vide si l'agent a déjà posté sur Discord via MCP) |
-| `POST /reset` | oublie la session : le prochain message repart à neuf (sûr même pendant un tour) |
+| `POST /send` | `{message, userId, username, channelId}` → réponse de l'agent `{result, session_id}` |
+| `POST /reset` | oublie la session |
 | `GET /status` · `GET /health` | état de l'agent · sonde de vie |
 
-### L'exécutable et l'unité créés par `create_agent`
+Sous Linux, `create_agent(…, executable:true, unit:true)` écrit en plus un service systemd prêt à l'emploi
+(`<workspace>/bridge/units/swarm-<agent>.service`). Il n'est **jamais activé tout seul** : l'outil vous rend la
+commande `sudo systemctl enable --now …` à lancer quand vous êtes prêt.
 
-`create_agent(…, executable:true)` copie le binaire courant (`std::env::current_exe`) dans `<workspace>/bin/<agent>` (`.exe` sous Windows) et rend son chemin dans la réponse. Chaque agent reçoit **sa propre copie**, nommée d'après lui : un fichier `bin/<agent>` n'est référencé que par cet agent, donc `delete_agent` le retire sans vérification de références croisées — il ne peut pas y en avoir. Plusieurs agents peuvent partager *le même binaire d'origine* (leurs copies proviennent du même exécutable), jamais le même fichier.
+---
 
-`create_agent(…, executable:true, unit:true)` écrit en plus une unit systemd `<workspace>/bridge/units/swarm-<agent>.service` — `ExecStart=<chemin> --headless --workspace <ws>`, redémarrage sur échec — **écrite, jamais activée** : rien n'est installé en `/etc`, rien ne démarre au boot tant que vous n'avez pas exécuté le `installHint` renvoyé par l'outil (`sudo cp … /etc/systemd/system/ && sudo systemctl enable --now swarm-<agent>`). Option **Linux uniquement** : ailleurs elle est refusée avec une erreur claire (« non supporté ici ») qui dit ce qui a quand même été créé (l'agent et sa copie du binaire restent en place).
+## Commandes
 
-## Comment un agent reste persistant
+```text
+swarm-control [COMMANDE] [OPTIONS]        swarm-control --help pour le détail
+```
 
-1. **Définition sur disque** : un prompt (persona) + une config, créés une fois.
-2. **Session reprise** : la session de l'agent est dans **son** fichier d'état (`bridge/state/<runner>-<agent>.json`, 30 jours) ; chaque run la repasse à `--resume`. L'ancien `bridge/agents.json` de l'OverMind TS reste lu en repli.
-3. **Registre de processus** : PID, statut et sortie en mémoire ; PID et statut du dernier run dans le même fichier d'état, pour le retrouver après redémarrage ou depuis une autre instance.
-4. **Un seul run vivant par agent — même entre plusieurs instances** : chaque run détient un **bail** sur disque (`bridge/owners/`, créé de façon exclusive, renouvelé toutes les 30 s, repris s'il est périmé). Deux reprises simultanées corrompraient la session : la seconde est refusée (`AGENT_BUSY`), qu'elle vienne du même process ou d'un autre `swarm-control` sur le même workspace.
-5. **Secours** : jetons de repli Claude sur 401 / 429 / 5xx ; session périmée → relance à neuf.
-
-Les définitions d'un agent vivent dans **son dossier de profil** `<workspace>/agents/<nom>/` (Claude : `.claude/…` ; Antigravity : `.antigravity/…` ; Hermes : ses profils natifs, déjà individuels) au lieu du workspace partagé. Les agents créés avant restent lus, modifiables et supprimables à leur ancien emplacement : un constructeur de chemin vise le profil dédié dès qu'il existe, sinon l'emplacement historique tant qu'il existe, sinon le profil dédié (créations). `list_agents`, `run_agent`, `update_agent_config` et `delete_agent` suivent automatiquement.
-
-Les agents Claude (`.claude/`) et Hermes (profils) sont ceux de l'ancien OverMind TS : vos agents existants fonctionnent tels quels, et leurs sessions déjà enregistrées dans `bridge/agents.json` sont reprises.
-
-## Léger (mesuré)
-
-Build `--release`, Windows 11, mémoire = *working set* du process (une exécution ; les piles de threads réservées mais non touchées n'y figurent pas) :
-
-| | |
+| Commande | À quoi ça sert |
 |---|---|
-| Binaire | **1,93 Mio** |
-| Mémoire au repos | **≈ 7 Mio** (7,3 Mio après 200 appels), 5 threads |
-| 24 agents résidents, au repos | **≈ 7 Mio** au total (5,1 Mio sans agent) : **≈ 80 Kio et 2 threads par agent** |
-| …après une demande à chacun | ≈ 9 Mio, 78 threads (le client garde une connexion ouverte par agent) |
-| Dépendances directes | `litemcp`, `serde`, `serde_json` — aucun runtime async |
+| *(aucune)* ou `serve` | démarre le serveur MCP (ou l'agent seul, en mode agent) |
+| `doctor` | diagnostic de l'installation : ✓ / ✗ |
+| `agents` | liste les agents et où ils tournent |
+| `run <agent> "<texte>"` | un tour pour un agent nommé |
+| `runs` | dernier run de chaque agent (statut, PID, fin) |
+| `ask "<texte>"` | pose une question à l'agent (`--agent NAME` ou exécutable renommé) |
+| `status` | état de l'agent |
+| `history [-n N]` | derniers échanges de l'agent |
+| `reset` | oublie la session de l'agent |
+| `config [--file NOM]` | fichiers de configuration de l'agent (secrets masqués) |
+| `schema <outil>` | format attendu par un outil MCP |
 
-La latence de LiteMCP lui-même est documentée dans [son dépôt](https://github.com/DeamonDev888/litemcp).
+Options utiles : `--workspace DIR` (autre dossier de travail), `--port N`, `--resident alice,bob` (démarre des
+agents résidents avec le serveur), `--model M`, `--json` (sortie brute pour les scripts), `--debug` (journal détaillé).
 
-## Face à la concurrence
+---
 
-Recherche GitHub du 2026-11-26, non exhaustive. La colonne « Forme » reprend la **description publique** de chaque projet ; je n'ai pas audité leur code.
+## Les 10 outils MCP
 
-| Projet | Forme (d'après sa description) | Notre angle |
-|---|---|---|
-| [agent-of-empires](https://github.com/agent-of-empires/agent-of-empires) | gère plusieurs agents Claude Code / OpenCode depuis une TUI ou le web | un **serveur MCP** : un agent pilote d'autres agents comme un outil |
-| [cas](https://github.com/codingagentsystem/cas) | orchestration multi-agent pour Claude Code, avec mémoire, tâches, règles | le cœur seul (persistance + orchestration), sans base de données |
-| [hcom](https://github.com/aannoo/hcom), [amux](https://github.com/mixpeek/amux) | agents qui se parlent / plan de contrôle avec tableau de tâches | sessions reprises par agent nommé, runs suivis et tuables |
-| [cersei](https://github.com/pacifio/cersei), [swarms-rs](https://github.com/The-Swarm-Corporation/swarms-rs) | SDK / framework Rust pour *écrire* des agents | on **orchestre des CLI existants** (Claude Code, Hermes) |
-| [Puppetmaster](https://github.com/professorpalmer/Puppetmaster) | plan de contrôle Python, état durable | Rust, MCP natif, quelques Mio |
+Ce sont les outils que votre client MCP (Claude Code…) voit quand il est branché sur `swarm-control`.
 
-Le créneau visé : **serveur MCP natif + agents persistants + orchestration**, sans base de données ni runtime async.
+| Outil | Rôle |
+|---|---|
+| `create_agent` | Crée un agent : nom, runner, personnalité, modèle, serveurs MCP. Options : `resident:true` (l'allume aussitôt), `executable:true` (sa copie d'exécutable), `unit:true` (service systemd, Linux), `cloneFrom` (Hermes : réutilise les clés d'un profil). |
+| `run_agent` | Fait travailler un agent. Avec `agentName` : il reprend sa conversation. Sans : agent **jetable**, un seul tour. `background:true` rend la main tout de suite avec un `runId`. |
+| `run_agents_parallel` | Jusqu'à 10 agents en même temps, runners mélangés. |
+| `agent_control` | Suivre un run : `status`, `stream` (sortie en direct), `wait`, `kill`, `list`. |
+| `agent_start` / `agent_stop` | Allume / éteint un agent **résident**. |
+| `list_agents` | Tous les agents, leur session, leur run en cours, leur adresse s'ils sont résidents. |
+| `get_agent_configs` | Fichiers d'un agent, **secrets masqués**. |
+| `update_agent_config` | Change modèle, serveurs MCP, variables, prompt. |
+| `delete_agent` | Supprime l'agent, sa session et son exécutable dédié (refusé s'il est en train de travailler). |
+
+Chaque outil publie un JSON Schema : les arguments invalides sont refusés avec la liste des problèmes.
+
+---
+
+## Agents résidents
+
+Un agent **résident** reste allumé : il a son propre petit serveur MCP (`swarm-<agent>`), une **file d'attente**
+et traite les demandes une par une, toujours dans la même conversation.
+
+```text
+agent_start(name:"alice")
+→ {"agent":"alice","url":"http://127.0.0.1:23082/mcp", …}
+```
+
+Son serveur expose : `ask` (poser une question), `status`, `stop`, ainsi que `history`, `logs`, `config` et `session`
+pour l'inspecter.
+
+Bon à savoir :
+
+- **Un agent n'est allumé qu'à un seul endroit**, même avec plusieurs `swarm-control` ouverts : un deuxième `agent_start` est refusé et indique où il tourne déjà.
+- Si vous appelez `run_agent` sur un agent résident, la demande est **transmise automatiquement** là où il tourne.
+- Les agents peuvent **s'appeler entre eux** (`ask`) ; les boucles (A → B → A) sont détectées et refusées.
+- Plusieurs serveurs sur la même machine ? Chacun prend un numéro (`swarm-control-1`, `-2`…, ou `--instance N`).
+
+Guide détaillé : [docs/RESIDENT-AGENTS.md](docs/RESIDENT-AGENTS.md).
+
+---
 
 ## Configuration
 
+Tout est optionnel. Les variables peuvent aussi être mises dans un fichier `.env` du workspace.
+
 | Variable | Rôle |
 |---|---|
-| `SWARM_WORKSPACE` | racine (`.claude/`, `.mcp.json`, `bridge/`) — sinon `--workspace`, sinon `~/.swarm-control` (ou `~/.overmind` s'il existe) |
-| `SWARM_TIMEOUT_MS` | délai d'un run (défaut 15 min ; un agent Claude peut surcharger via `AGENT_TIMEOUT_MS` dans son `env`) |
-| `SWARM_CLAUDE_PERMISSIONS` | défaut `--dangerously-skip-permissions` |
-| `CLAUDE_BIN`, `HERMES_BIN`, `HERMES_HOME` | emplacement des CLI et du home Hermes |
+| `SWARM_WORKSPACE` | dossier de travail (sinon `--workspace`, sinon `~/.swarm-control`) |
+| `SWARM_TIMEOUT_MS` | durée maximale d'un run (défaut : 15 min) |
+| `SWARM_TOKEN` | jeton exigé par les serveurs MCP (`Authorization: Bearer …`) — **obligatoire** pour écouter ailleurs qu'en local |
+| `SWARM_DEBUG=1` | journal détaillé, comme `--debug` |
+| `SWARM_CLAUDE_PERMISSIONS` | permissions passées à Claude (défaut `--dangerously-skip-permissions`) |
+| `CLAUDE_BIN`, `HERMES_BIN`, `AGY_BIN` | chemin des runners s'ils ne sont pas dans le `PATH` |
+| `HERMES_HOME` | dossier des profils Hermes |
 
-Les anciennes variables `OVERMIND_*` sont toujours lues. Alias de modèles : `<workspace>/model-aliases.json` (`{"surnom": "vrai-modèle"}`).
+Alias de modèles : `<workspace>/model-aliases.json` → `{"rapide": "claude-haiku-5-5"}`.
+Les anciennes variables `OVERMIND_*` restent lues.
 
-## Points d'attention
+### Sécurité — à lire
 
-- **Credentials Hermes par profil** : un profil neuf n'hérite pas de vos clés. `create_agent` avertit ; `cloneFrom:<profil>` copie config, `.env`, `SOUL.md` et skills d'un profil qui marche.
-- **Aucun secret sur disque** : le fichier de settings passé à Claude ne contient pas `env` ; jetons et variables passent par l'environnement du process.
-- **MCP isolés** : un agent Claude reçoit `--strict-mcp-config` avec *seulement* ses serveurs.
-- **Sécurité** : le serveur écoute en `127.0.0.1` sans authentification et lance les agents en `--dangerously-skip-permissions`. **Ne pas l'exposer au réseau** (LiteMCP offre la signature de requêtes et TLS si besoin).
+- Par défaut, le serveur n'écoute **qu'en local** (`127.0.0.1`) : personne d'autre ne peut s'y connecter.
+- Les agents tournent **sans demande de permission** (`--dangerously-skip-permissions`) : ils peuvent lire, écrire et exécuter dans leur dossier. Donnez-leur des tâches en conséquence.
+- Pour écouter sur le réseau (`--host 0.0.0.0`), un `SWARM_TOKEN` est **exigé** : sans lui, le démarrage est refusé.
+- Aucun secret n'est écrit dans les fichiers passés à Claude ; les jetons passent par l'environnement.
 
-## Développement
+---
 
-```bash
-bash scripts/verify.sh      # fmt · clippy -D warnings · tests · doc · paquet · cargo-deny
-cargo test                  # tests unitaires + de bout en bout (faux CLI : multi-instance, agents résidents, file…)
+## Dépannage
+
+<details>
+<summary><b>« swarm-control » n'est pas reconnu / command not found</b></summary>
+
+Ouvrez un **nouveau** terminal (le `PATH` n'est relu qu'au démarrage). Sous Linux/macOS, vérifiez que
+`~/.local/bin` est dans votre `PATH` (le script d'installation vous l'indique sinon).
+</details>
+
+<details>
+<summary><b>Windows affiche « Windows a protégé votre ordinateur » (SmartScreen)</b></summary>
+
+L'exécutable n'est pas signé. Cliquez sur **Informations complémentaires → Exécuter quand même**,
+ou installez avec le script PowerShell, qui débloque le fichier.
+</details>
+
+<details>
+<summary><b>macOS refuse d'ouvrir le fichier</b></summary>
+
+Si vous l'avez téléchargé avec un navigateur : `xattr -d com.apple.quarantine ./swarm-control`.
+Le script `install.sh` n'a pas ce problème.
+</details>
+
+<details>
+<summary><b>doctor dit que <code>claude</code> / <code>hermes</code> / <code>agy</code> est introuvable</b></summary>
+
+Le runner n'est pas installé, ou pas dans le `PATH`. Installez-le, ou indiquez son chemin :
+`CLAUDE_BIN`, `HERMES_BIN`, `AGY_BIN`.
+</details>
+
+<details>
+<summary><b>Un agent Hermes neuf ne répond pas (erreur de clé)</b></summary>
+
+Un nouveau profil Hermes n'hérite pas de vos clés API. Créez-le avec `cloneFrom:"<profil qui marche>"`
+pour copier sa config, son `.env` et ses skills.
+</details>
+
+<details>
+<summary><b>Erreur <code>AGENT_BUSY</code></b></summary>
+
+L'agent est déjà en train de travailler (deux réponses en même temps abîmeraient sa conversation).
+Attendez la fin, ou arrêtez le run : `agent_control(action:"kill", …)`. Les agents résidents, eux, mettent les
+demandes en file d'attente.
+</details>
+
+<details>
+<summary><b>Le port est déjà pris</b></summary>
+
+`swarm-control` essaie 23080 à 23099 tout seul. Pour en choisir un : `swarm-control --port 24000`.
+</details>
+
+Toujours bloqué ? `swarm-control --debug …` affiche tout ce qui se passe, et `swarm-control doctor` résume l'état.
+
+---
+
+## Pour aller plus loin
+
+<details>
+<summary><b>Comment un agent garde sa mémoire</b></summary>
+
+1. **Sa définition est sur disque** : un prompt (personnalité) et une config, dans son dossier `<workspace>/agents/<nom>/` (Hermes : ses profils natifs).
+2. **Sa session est reprise** : l'identifiant de session est rangé dans `bridge/state/<runner>-<agent>.json` (30 jours) et repassé au runner (`--resume`) à chaque tour. Si la session a disparu, l'agent repart à neuf, une seule fois.
+3. **Un seul run à la fois par agent**, même entre plusieurs serveurs : un bail sur disque (`bridge/owners/`) l'empêche de répondre deux fois en parallèle (`AGENT_BUSY`).
+4. **Secours** : jetons de repli Claude sur 401 / 429 / 5xx.
+5. **Historique** : chaque tour est journalisé dans `bridge/history/` (fichiers JSONL tournants).
+
+Les agents créés avec l'ancien OverMind TS (`.claude/`, profils Hermes, `bridge/agents.json`) fonctionnent tels quels.
+</details>
+
+<details>
+<summary><b>Utiliser swarm-control comme bibliothèque Rust</b></summary>
+
+```toml
+[dependencies]
+swarm-control = { version = "0.1", default-features = false }   # sans l'interface terminal
 ```
 
-Le code est découpé en petits fichiers classés par couche : voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Publier une version : [docs/RELEASE.md](docs/RELEASE.md).
+```rust
+fn main() -> std::process::ExitCode {
+    swarm_control::serve_agent("sniper")   // un binaire dédié à l'agent « sniper »
+}
+```
+
+Documentation : [docs.rs/swarm-control](https://docs.rs/swarm-control).
+</details>
+
+### Léger (mesuré)
+
+Build `--release`, Windows 11, mémoire = *working set* du process :
+
+| | |
+|---|---|
+| Binaire | **≈ 2 Mio** |
+| Mémoire au repos | **≈ 7 Mio**, 5 threads |
+| 24 agents résidents au repos | **≈ 7 Mio** au total : **≈ 80 Kio et 2 threads par agent** |
+| Dépendances directes | `litemcp`, `serde`, `serde_json` (+ `ratatui` pour l'interface) — aucun runtime async |
+
+<details>
+<summary><b>Face aux autres projets</b></summary>
+
+Recherche GitHub du 2026-11-26, non exhaustive, d'après la description publique de chaque projet.
+
+| Projet | Forme | Notre angle |
+|---|---|---|
+| [agent-of-empires](https://github.com/agent-of-empires/agent-of-empires) | plusieurs agents Claude Code / OpenCode depuis une TUI ou le web | un **serveur MCP** : un agent pilote d'autres agents comme un outil |
+| [cas](https://github.com/codingagentsystem/cas) | orchestration multi-agent pour Claude Code, mémoire, tâches | le cœur seul (persistance + orchestration), sans base de données |
+| [hcom](https://github.com/aannoo/hcom), [amux](https://github.com/mixpeek/amux) | agents qui se parlent / plan de contrôle | sessions reprises par agent nommé, runs suivis et tuables |
+| [cersei](https://github.com/pacifio/cersei), [swarms-rs](https://github.com/The-Swarm-Corporation/swarms-rs) | frameworks Rust pour *écrire* des agents | on **orchestre des CLI existants** |
+| [Puppetmaster](https://github.com/professorpalmer/Puppetmaster) | plan de contrôle Python, état durable | Rust, MCP natif, quelques Mio |
+</details>
 
 ## Feuille de route
 
-> À venir — **pas encore implémenté**. Aujourd'hui, Hermes, Claude Code et Antigravity sont pilotés. Déjà fait : les [agents résidents](#agents-résidents) (serveur MCP propre, file, `ask`, annonce), leur exclusivité entre instances, les **instances numérotées** (`swarm-control-N`), le **routage** de `run_agent` vers l'hôte de l'agent, [**un exécutable par agent**](#un-exécutable-par-agent) avec son pont HTTP, et le [dossier de profil par agent](#comment-un-agent-reste-persistant) (`executable`/`unit` de `create_agent` compris).
+Déjà là : Claude Code, Hermes et Antigravity · sessions persistantes · agents résidents · un exécutable par agent ·
+pont HTTP · CLI complète et interface terminal · historique · découverte des pairs · jeton d'authentification.
 
-- **Des pairs qui se trouvent tout seuls** : les `swarm-*` du registre de LiteMCP sont découverts et injectés dans la configuration MCP de chaque agent, dont le modèle les appelle comme des outils (`ask` existe déjà, ainsi que le refus des cycles ; l'injection reste à faire).
-- **Plus de runners** : Antigravity, opencode, Kilo, Cline, OpenClaw (grokbot : dès que sa commande est connue), puis tout CLI décrit sans recompiler.
-- **CLI complète** : sous-commandes (`serve`, `agents`, `run`, `runs`, `doctor`…), introduction en ASCII, affichage de tout ce que fait le serveur.
-- **Mode debug** : traces des requêtes MCP, des commandes lancées, des sessions reprises et des retentes.
-- **JSON Schema** : déjà publié par outil ; à exposer aussi en ligne de commande (`schema <outil>`).
+À venir :
+
+- **Pairs injectés automatiquement** : chaque agent verra les autres agents résidents comme des outils, sans configuration.
+- **Plus de runners** : opencode, Kilo, Cline, OpenClaw, grokbot, puis n'importe quel CLI décrit sans recompiler.
+
+## Contribuer
+
+```bash
+bash scripts/verify.sh      # fmt · clippy · tests · doc · paquet · cargo-deny
+cargo test                  # tests unitaires et de bout en bout
+```
+
+Organisation du code : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Publier une version : [docs/RELEASE.md](docs/RELEASE.md) · Historique : [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
-MIT OU Apache-2.0, au choix.
+MIT ou Apache-2.0, au choix.
 
 <div align="center">
   <br />

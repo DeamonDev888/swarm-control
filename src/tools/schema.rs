@@ -34,7 +34,8 @@ pub fn run_object() -> Obj {
         .opt(
             "agentName",
             name_schema(
-                "Agent persistant (créé par create_agent). Sa session est reprise automatiquement.",
+                "Agent persistant (créé par create_agent). Sa session est reprise automatiquement. \
+                 Sans agentName : agent éphémère — un tour, rien de sauvegardé.",
             ),
         )
         .opt(

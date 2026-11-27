@@ -105,7 +105,7 @@ fn copy_env_from_copies_env_and_rejects_missing_source() {
         r#"{"env":{"GEMINI_API_KEY":"k1","CUSTOM":"v1"}}"#,
     )
     .unwrap();
-    agents::create(
+    let created = agents::create(
         &ws.0,
         &CreateArgs {
             name: "cloned",
@@ -117,7 +117,9 @@ fn copy_env_from_copies_env_and_rejects_missing_source() {
         },
     )
     .unwrap();
-    let raw = std::fs::read_to_string(ws.0.join(".antigravity/settings_cloned.json")).unwrap();
+    // Lu via le chemin rendu par create : l'emplacement (profil dédié ou
+    // historique) ne doit pas être épinglé par le test.
+    let raw = std::fs::read_to_string(&created.config_path).unwrap();
     assert!(raw.contains("\"CUSTOM\": \"v1\""));
 
     let err = agents::create(

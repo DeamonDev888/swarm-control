@@ -1,6 +1,6 @@
 //! # swarm-control
 //!
-//! ![swarm-control](https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/hornet-pixel-banner-4k.png)
+//! ![swarm-control](https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/hornet-pixel-banner.svg)
 //!
 //! Agents IA persistants (Claude Code, Hermes) pilotés par MCP, servis par
 //! [LiteMCP](https://crates.io/crates/litemcp).
@@ -14,6 +14,7 @@
 //! | `binaries`  | localisation de `claude` et `hermes`                          |
 //! | `state`     | état persistant par agent (`bridge/state/`)                   |
 //! | `sessions`  | session d'un agent (état + repli sur l'ancien `agents.json`)  |
+//! | `history`   | journal des tours (`bridge/history/…jsonl`), rotation         |
 //! | `process`   | lancement, capture, timeout, kill d'un process                |
 //! | `instance`  | numéro d'instance `swarm-control-N`                           |
 //! | `owners`    | baux : un seul process fait tourner / héberge un agent        |
@@ -37,6 +38,8 @@ mod agents;
 mod binaries;
 mod cli;
 mod config;
+mod debug;
+mod history;
 mod instance;
 mod owners;
 mod peers;
@@ -50,5 +53,8 @@ mod sessions;
 mod state;
 mod store;
 mod tools;
+
+#[cfg(feature = "tui")]
+mod tui;
 
 pub use cli::{run, serve_agent};

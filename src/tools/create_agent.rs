@@ -2,18 +2,20 @@
 
 use super::errors::{invalid, parse_runner};
 use super::schema::{config_opt, name_schema, runner_opt};
-use crate::agents::{self, CreateArgs, Runner};
+use crate::agents::{self, CreateArgs, Runner, executable};
 use crate::{config, residents};
 use litemcp::prelude::*;
 use litemcp::zod;
 use serde::Deserialize;
 use serde_json::json;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-const DESCRIPTION: &str = "Crée un agent persistant. Claude : .claude/agents/<nom>.md + settings_<nom>.json + \
-    .mcp.<nom>.json. Hermes : profil natif (hermes profile create) + SOUL.md. Antigravity : \
-    .antigravity/agents/<nom>.md + settings_<nom>.json (CLI agy). Le prompt définit sa persona. \
-    resident:true le rend aussitôt résident (serveur MCP propre, file de demandes).";
+const DESCRIPTION: &str = "Crée un agent persistant. Claude : profil agents/<nom>/.claude (prompt, \
+    settings, MCP). Hermes : profil natif (hermes profile create) + SOUL.md. Antigravity : profil \
+    agents/<nom>/.antigravity (CLI agy). Le prompt définit sa persona. resident:true le rend \
+    aussitôt résident (serveur MCP propre, file de demandes). executable:true copie le binaire \
+    courant dans <workspace>/bin/<nom> ; unit:true (Linux) écrit en plus une unit systemd \
+    --headless (écrite, non activée).";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +28,10 @@ struct Args {
     clone_from: Option<String>,
     #[serde(default)]
     resident: bool,
+    #[serde(default)]
+    executable: bool,
+    #[serde(default)]
+    unit: bool,
     config: Option<String>,
 }
 
@@ -38,6 +44,22 @@ pub fn register(builder: ServerBuilder) -> ServerBuilder {
         .opt("copyEnvFrom", zod::describe("Claude : settings.json existant dont copier env + serveurs MCP", zod::string().min(1)))
         .opt("cloneFrom", zod::describe("Hermes : profil existant dont copier config, .env, SOUL, skills (les credentials sont par profil)", zod::string().min(1)))
         .opt("resident", zod::describe("Rendre l'agent résident tout de suite", zod::boolean()))
+        .opt(
+            "executable",
+            zod::describe(
+                "Copier le binaire courant dans <workspace>/bin/<nom> — une copie par agent, \
+                 que delete_agent retirera",
+                zod::boolean(),
+            ),
+        )
+        .opt(
+            "unit",
+            zod::describe(
+                "Écrire en plus une unit systemd --headless dans <workspace>/bridge/units \
+                 (non activée, jamais /etc ; fichier à copier sur l'hôte Linux)",
+                zod::boolean(),
+            ),
+        )
         .opt("config", config_opt())
         .strict();
     builder.tool_parse("create_agent", DESCRIPTION, schema, handle)
@@ -76,10 +98,42 @@ fn handle(a: Args) -> ToolResult {
     if !created.warnings.is_empty() {
         out["warnings"] = json!(created.warnings);
     }
+    if a.executable || a.unit {
+        let exe = install_binary(&ws, &a.name)?;
+        out["executable"] = json!(exe.display().to_string());
+        if a.unit {
+            let unit = write_service(&ws, &a.name, &exe)?;
+            out["unit"] = json!({
+                "path": unit.display().to_string(),
+                "installHint": executable::install_hint(&a.name),
+            });
+        }
+    }
     if a.resident {
         add_residency(&mut out, &ws, runner, &a.name);
     }
     Ok(out)
+}
+
+/// L'agent est créé quoi qu'il arrive : un échec d'exécutable le dit, plutôt que de le taire.
+fn install_binary(ws: &Path, name: &str) -> Result<PathBuf, ToolError> {
+    executable::install(ws, name).map_err(|e| {
+        invalid(format!(
+            "L'agent '{name}' est créé, mais son exécutable n'a pas pu être installé : {e}. \
+             Le supprimer avec delete_agent, ou réessayer avec executable:true."
+        ))
+    })
+}
+
+/// Même contrat : binaire en place, unit manquante ne doit pas faire croire à un échec total.
+fn write_service(ws: &Path, name: &str, exe: &Path) -> Result<PathBuf, ToolError> {
+    executable::write_unit(ws, name, exe).map_err(|e| {
+        invalid(format!(
+            "L'agent '{name}' est créé et son exécutable installé ('{}'), mais l'unit systemd \
+             n'a pas pu être écrite : {e}.",
+            exe.display()
+        ))
+    })
 }
 
 /// L'agent est créé quoi qu'il arrive : un échec de résidence est signalé, pas fatal.

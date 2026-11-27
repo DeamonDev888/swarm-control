@@ -13,7 +13,7 @@ mod stdin;
 mod utf8;
 mod wait;
 
-pub use alive::pid_alive;
+pub use alive::{pid_alive, pids_alive};
 pub use command::command;
 pub use kill::kill_tree;
 pub use outcome::{End, ProcOutput};

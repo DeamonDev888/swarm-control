@@ -1,20 +1,17 @@
 //! Plusieurs instances sur le même workspace : un agent n'a qu'un seul exécutant à la fois.
 
 use crate::harness::{start, start_sharing};
+use crate::resident::eventually;
 use crate::rpc::{call, last_run, lease_file, ok, session_of, state_file};
 use serde_json::{Value, json};
-use std::time::Duration;
 
 /// Attend que le run en arrière-plan de `agent` ait un PID (le CLI est lancé).
 fn wait_for_pid(h: &crate::harness::Harness, agent: &str) {
-    for _ in 0..80 {
+    let started = || {
         let status = ok(h, "agent_control", json!({"action": "status", "agentName": agent}));
-        if status["pid"].is_number() {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    panic!("le run de {agent} n'a jamais démarré");
+        status["pid"].is_number()
+    };
+    assert!(eventually(8, started), "le run de {agent} n'a jamais démarré");
 }
 
 #[test]
@@ -48,7 +45,11 @@ fn another_instance_cannot_run_an_agent_that_is_running() {
 
     // Une fois le run de A arrêté, le bail est libéré et B peut lancer l'agent.
     ok(&a, "agent_control", json!({"action": "kill", "agentName": "alice"}));
-    assert!(!lease_file(&a.ws, "claude", "alice").exists());
+    // Le run tué libère son bail en se terminant : on l'attend au lieu de le supposer.
+    assert!(
+        eventually(5, || !lease_file(&a.ws, "claude", "alice").exists()),
+        "bail non libéré après kill"
+    );
     ok(&b, "run_agent", json!({"runner": "claude", "agentName": "alice", "prompt": "après"}));
 }
 

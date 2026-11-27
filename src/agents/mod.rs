@@ -12,6 +12,7 @@ mod claude;
 mod configs;
 mod create;
 mod delete;
+pub mod executable;
 mod files;
 mod hermes;
 mod list;

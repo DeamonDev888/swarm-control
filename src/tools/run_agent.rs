@@ -11,9 +11,10 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
 
-const DESCRIPTION: &str = "Lance un agent persistant (Claude Code ou Hermes). Avec agentName, la session \
+const DESCRIPTION: &str = "Lance un agent persistant (Claude Code, Hermes ou Antigravity). Avec agentName, la session \
     précédente est reprise automatiquement (autoResume) et la nouvelle est sauvegardée : l'agent garde sa \
-    mémoire de conversation d'un appel à l'autre. background:true rend la main tout de suite avec un runId \
+    mémoire de conversation d'un appel à l'autre. SANS agentName, l'agent est éphémère : un tour, aucune \
+    session gardée. background:true rend la main tout de suite avec un runId \
     à suivre via agent_control. Un agent résident (agent_start) est servi par son hôte, quelle que soit \
     l'instance : la demande entre dans sa file (champ routedTo).";
 

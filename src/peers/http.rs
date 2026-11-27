@@ -30,6 +30,9 @@ pub fn post(
     for (name, value) in headers {
         head.push_str(&format!("{name}: {value}\r\n"));
     }
+    if let Some(token) = crate::server::token() {
+        head.push_str(&format!("Authorization: Bearer {token}\r\n"));
+    }
     head.push_str(&format!("Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()));
     stream.write_all(head.as_bytes()).map_err(failed)?;
     stream.write_all(body.as_bytes()).map_err(failed)?;

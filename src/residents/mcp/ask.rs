@@ -55,7 +55,7 @@ fn handle(ctx: &Arc<Ctx>, args: Args) -> ToolResult {
     let via = args.via.unwrap_or_default();
     chain::check(&ctx.agent, &via).map_err(ToolError::invalid_input)?;
 
-    let (turn, outcome) = Turn::new(args.prompt, args.from, args.model);
+    let (turn, outcome) = Turn::with_via(args.prompt, args.from, args.model, via.clone());
     let cancelled = Arc::clone(&turn.cancelled);
     ctx.submit(turn).map_err(ToolError::upstream)?;
 

@@ -19,26 +19,74 @@ pub enum CallError {
 
 /// Appelle `tool` sur le serveur `url` ; rend `structuredContent` (ou le texte).
 pub fn call_tool(url: &str, tool: &str, args: Value, wait: Duration) -> Result<Value, CallError> {
+    let params = json!({
+        "name": tool, "arguments": args,
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": PROTOCOL,
+            "io.modelcontextprotocol/clientCapabilities": {}
+        }
+    });
+    request(url, "tools/call", tool, params, wait)
+}
+
+/// Liste les outils d'un serveur (`tools/list`) : `{tools: [...]}`.
+pub fn list_tools(url: &str, wait: Duration) -> Result<Value, CallError> {
+    let params = json!({
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": PROTOCOL,
+            "io.modelcontextprotocol/clientCapabilities": {}
+        }
+    });
+    request(url, "tools/list", "tools/list", params, wait)
+}
+
+fn request(
+    url: &str,
+    method: &str,
+    name: &str,
+    params: Value,
+    wait: Duration,
+) -> Result<Value, CallError> {
+    let started = std::time::Instant::now();
+    crate::debug!("mcp → {method} {name} {url}");
     let target =
         url::parse(url).ok_or_else(|| CallError::Unreachable(format!("URL invalide: {url}")))?;
-    let body = json!({
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {
-            "name": tool, "arguments": args,
-            "_meta": {
-                "io.modelcontextprotocol/protocolVersion": PROTOCOL,
-                "io.modelcontextprotocol/clientCapabilities": {}
-            }
+    let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).to_string();
+    // En-têtes de routage MCP 2026-07-28 (SEP-2243) : `Mcp-Method` reprend la méthode du corps ;
+    // `Mcp-Name` n'est permis que pour les méthodes qui nomment une cible (`tools/call`).
+    let mut headers = vec![("MCP-Protocol-Version", PROTOCOL), ("Mcp-Method", method)];
+    if method == "tools/call" {
+        headers.push(("Mcp-Name", name));
+    }
+    let text = match http::post(&target, &headers, &body, wait) {
+        Ok(text) => text,
+        Err(e) => {
+            let why = match &e {
+                PostError::Unreachable(message) => format!("injoignable: {message}"),
+                PostError::Failed(message) => format!("échec: {message}"),
+            };
+            crate::debug!("mcp ✗ {method} {name} · {} ms · {why}", started.elapsed().as_millis());
+            return Err(match e {
+                PostError::Unreachable(message) => CallError::Unreachable(message),
+                PostError::Failed(message) => CallError::Protocol(message),
+            });
         }
-    })
-    .to_string();
-    let headers =
-        [("MCP-Protocol-Version", PROTOCOL), ("Mcp-Method", "tools/call"), ("Mcp-Name", tool)];
-    let text = http::post(&target, &headers, &body, wait).map_err(|e| match e {
-        PostError::Unreachable(m) => CallError::Unreachable(m),
-        PostError::Failed(m) => CallError::Protocol(m),
-    })?;
-    decode(&text)
+    };
+    match decode(&text) {
+        Ok(value) => {
+            crate::debug!("mcp ← {method} {name} · {} ms", started.elapsed().as_millis());
+            Ok(value)
+        }
+        Err(e) => {
+            let why = match &e {
+                CallError::Unreachable(message) => message.clone(),
+                CallError::Tool(message) => format!("outil: {message}"),
+                CallError::Protocol(message) => format!("protocole: {message}"),
+            };
+            crate::debug!("mcp ✗ {method} {name} · {} ms · {why}", started.elapsed().as_millis());
+            Err(e)
+        }
+    }
 }
 
 fn decode(text: &str) -> Result<Value, CallError> {
@@ -76,6 +124,12 @@ mod tests {
     #[test]
     fn closed_port_is_unreachable() {
         let r = call_tool("http://127.0.0.1:1/mcp", "ask", json!({}), Duration::from_secs(1));
+        assert!(matches!(r, Err(CallError::Unreachable(_))));
+    }
+
+    #[test]
+    fn a_list_request_is_built_like_a_call() {
+        let r = list_tools("http://127.0.0.1:1/mcp", Duration::from_secs(1));
         assert!(matches!(r, Err(CallError::Unreachable(_))));
     }
 }

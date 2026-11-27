@@ -50,7 +50,9 @@ impl Holder {
     }
 
     pub fn is_stale(&self, now: u64) -> bool {
-        !process::pid_alive(self.pid) || now.saturating_sub(self.ts) > STALE_MS
+        // L'âge d'abord : un bail silencieux est périmé sans qu'on interroge le système
+        // (sous Windows, chaque `pid_alive` lance `tasklist`).
+        now.saturating_sub(self.ts) > STALE_MS || !process::pid_alive(self.pid)
     }
 }
 

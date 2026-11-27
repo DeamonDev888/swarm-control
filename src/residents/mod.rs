@@ -27,10 +27,19 @@ mod start;
 mod status;
 mod stop;
 mod table;
-mod turn;
+pub(crate) mod turn;
 mod waiting;
 mod worker;
 
 pub use bridge::open as open_bridge;
+pub use ctx::Ctx;
 pub use start::{start, start_on};
 pub use stop::stop;
+
+use crate::agents::Runner;
+use std::sync::Arc;
+
+/// Contexte d'un agent hébergé **par ce process** (TUI, outils internes).
+pub fn ctx_of(agent: &str, runner: Runner) -> Option<Arc<Ctx>> {
+    table::find(agent, Some(runner)).first().map(|host| Arc::clone(host.ctx()))
+}

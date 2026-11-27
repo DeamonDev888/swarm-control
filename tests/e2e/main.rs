@@ -12,6 +12,7 @@ mod harness;
 mod hermes_errors;
 mod hermes_lifecycle;
 mod hermes_profiles;
+mod history;
 mod instances;
 mod multi_instance;
 mod parallel;
