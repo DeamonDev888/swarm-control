@@ -29,13 +29,18 @@ mod tests {
     #[test]
     fn the_file_name_gives_the_agent() {
         assert_eq!(name("/opt/agents/sniper").as_deref(), Some("sniper"));
-        assert_eq!(name(r"C:\agents\sniper.exe").as_deref(), Some("sniper"));
+        assert_eq!(name("agents/sniper.exe").as_deref(), Some("sniper"));
         assert_eq!(name("trade_2").as_deref(), Some("trade_2"));
+        // `\` ne sépare les dossiers que sous Windows.
+        #[cfg(windows)]
+        assert_eq!(name(r"C:\agents\sniper.exe").as_deref(), Some("sniper"));
     }
 
     #[test]
     fn swarm_control_itself_is_not_an_agent() {
         assert_eq!(name("swarm-control"), None);
+        assert_eq!(name("/usr/local/bin/Swarm-Control.exe"), None);
+        #[cfg(windows)]
         assert_eq!(name(r"C:\bin\Swarm-Control.exe"), None);
         assert_eq!(name("target/debug/deps/swarm_control-1a2b3c"), None);
         assert_eq!(name(""), None);

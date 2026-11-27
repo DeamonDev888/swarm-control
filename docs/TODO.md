@@ -1,73 +1,72 @@
 # TODO — swarm-control
 
-*État au 2026-11-27. Source : [PLAN.md](PLAN.md), [RESIDENT-AGENTS.md](RESIDENT-AGENTS.md), README.*
+*État au 2026-11-27. Le pourquoi et le détail sont dans [PLAN.md](PLAN.md) (les numéros §
+renvoient à ses sections).*
 
-## 0. Urgent — sécuriser le travail fait *(fait le 2026-11-27)*
+## Fait
 
-- [x] **Committer la refonte** : tout le code découpé (`src/**`, `tests/e2e/**`, `examples/fake_cli/`),
-      la doc, la CI, les scripts et les licences ne sont **pas encore dans git** (seul le premier commit,
-      avec l'ancienne structure à plat, existe).
-- [x] Créer le dépôt GitHub `DeamonDev888/swarm-control` et ajouter le remote.
-- [x] Pousser `main`, vérifier que `ci.yml` passe sur GitHub.
+- [x] Refonte en couches commitée ; dépôt GitHub créé ; CI sur les 3 OS.
+- [x] 0.1.0 et 0.1.1 publiées (crates.io, release GitHub, binaires) ; logo sur crates.io et docs.rs.
+- [x] Mode agent (binaire renommé, `--agent`, `--port`, `serve_agent()`) et pont HTTP `--bridge`
+      compatible overmind-bridge — `main` 4a2d1cf.
 
-## 1. Valider contre les vrais CLI (PLAN §4)
+## 1. Corrections urgentes (PLAN §5)
 
-- [ ] Smoke test Hermes : `create_agent(runner:"hermes", cloneFrom:"<profil qui marche>")`, puis deux
-      `run_agent` — le second doit se souvenir du premier.
-- [ ] Smoke test Claude : même chose avec un vrai jeton.
-- [ ] Smoke test résident : `agent_start` + `ask` réel, puis routage depuis une 2ᵉ instance.
+- [ ] **C1** CI rouge : committer et pousser le correctif des tests `cli::exe` (chemins Windows sous `cfg(windows)`).
+- [ ] **C2** `Holder::is_stale` : tester l'âge du bail avant le PID (évite un `tasklist` inutile sous Windows).
+- [ ] **C3** Pont `/send` : annuler le tour en file si le client HTTP se déconnecte.
+- [ ] **C4** `release.yml` : monter `softprops/action-gh-release` (Node 20 déprécié).
+- [ ] **C5** `RESIDENT-AGENTS.md` : documenter le mode agent et le pont.
+- [ ] Runner Antigravity (en cours dans l'arbre, autre chantier) : terminer, tester, committer à part.
 
-## 2. Publier la 0.1.0 (docs/RELEASE.md) *(0.1.0 et 0.1.1 publiées le 2026-11-27)*
+## 2. Journal des tours et MCP riche (PLAN §4.1)
 
-- [x] Renseigner le secret `CARGO_REGISTRY_TOKEN` sur GitHub.
-- [x] `bash scripts/release-check.sh`, puis tag `v0.1.0` → `release.yml` (crates.io + release + binaires).
-- [ ] Vérifier la page crates.io, docs.rs et les badges du README.
-- [ ] Mettre l'image `assets/social-preview.jpg` comme aperçu du dépôt GitHub.
+- [ ] `bridge/history/<runner>-<agent>.jsonl` écrit par le fil de travail, avec rotation.
+- [ ] Outils d'agent `history`, `session` (show / reset / set), `logs`, `config`.
+- [ ] Tests e2e : historique après 3 tours, rotation, `session reset`.
 
-## 3. Ménage de la doc
+## 3. CLI de l'agent et `--debug` (PLAN §4.2)
 
-- [ ] PLAN §5 est périmé : « verrou d'agent en processus » n'est plus vrai (bail inter-process
-      `bridge/owners/` construit). À corriger.
-- [ ] Mettre à jour les compteurs (108 tests) à chaque ajout.
+- [ ] Sous-commandes d'agent : `serve`, `ask`, `status`, `history`, `reset`, `config`, `schema <outil>`.
+- [ ] Sous-commandes d'instance : `agents`, `run`, `runs`, `doctor`.
+- [ ] `--debug` / `SWARM_DEBUG=1` : requêtes MCP, commandes lancées (secrets masqués), sessions, retentes, baux.
+- [ ] `--headless` explicite (systemd) ; TUI par défaut dans un terminal (après §4).
 
-## 4. Feuille de route (dans l'ordre décidé)
+## 4. TUI de l'agent (PLAN §4.3)
 
-### 4.1 Runner générique
-- [ ] Format JSON de description d'un runner (commande, livraison du prompt, reprise, modèle,
-      extraction de session).
-- [ ] Brancher les runners vérifiables ici : **opencode**, **kilo**, **gemini/antigravity**, **qwen**.
-- [ ] Plus tard (binaires absents) : cline, openclaw, grokbot.
-- [ ] Tests e2e avec le faux CLI pour un runner décrit en JSON.
+- [ ] Feature `tui` (`ratatui` + `crossterm`), active dans les binaires publiés.
+- [ ] Panneaux : en-tête · serveurs MCP et leur état · conversation · file et tour en cours · logs.
+- [ ] Saisie = `ask` ; raccourcis reset / stop / debug / quitter.
+- [ ] Mesurer taille du binaire et mémoire avant/après.
 
-### 4.2 Un agent = 1 profil + 1 exécutable (étape 4)
-- [x] `alice.exe` = le binaire sous un autre nom ; le nom du fichier donne l'identité (`--agent` aussi).
-- [x] Pont HTTP compatible `overmind-bridge` (`--bridge N`) pour les routeurs Discord existants.
-- [ ] Dossier de profil par agent.
-- [ ] Champ `executable` dans `create_agent` ; plusieurs agents peuvent partager un exécutable.
+## 5. Fabrication d'agents (PLAN §4.4)
 
-### 4.2 bis Migration de Sniper (serveur 192.168.40.9)
-- [ ] Lancer `sniperbot_analyst` en mode agent sur un port libre, à côté du worker Node :3001 ; tester `/send` au `curl`.
-- [ ] Mémoire : la SOUL utilise `memory_search` / `memory_store` d'overmind-mcp (:3099) — garder ce serveur pour la mémoire, ou l'ajouter.
-- [ ] Basculer `!sniper` du routeur `discord-master` vers le nouveau port, puis arrêter le worker Node.
-- [ ] Puis les agents `trade2`…`trade7` (même structure).
+- [ ] `create_agent {executable:true}` → `<workspace>/bin/<agent>(.exe)` ; `delete_agent` le retire.
+- [ ] Option `unit:true` (Linux) : unit systemd `--headless`, non activée.
+- [ ] Documenter `run_agent` sans `agentName` comme agent éphémère.
+- [ ] Dossier de profil par agent ; exécutable partagé entre plusieurs agents.
 
-### 4.3 Pairs automatiques (étape 5)
-- [ ] Outil / fonction `peers` : liste des `swarm-*` du registre LiteMCP.
-- [ ] Injection des pairs dans la config MCP de chaque agent
-      (Claude : `--mcp-config` ; Hermes : `mcp_servers` du profil ; autres : selon le runner).
-- [ ] Test e2e : alice appelle `bob.ask`, refus de cycle via `via`.
+## 6. Migration de Sniper — serveur 192.168.40.9 (PLAN §6)
 
-### 4.4 CLI complète
-- [ ] Sous-commandes : `serve`, `agents`, `run`, `runs`, `doctor`.
-- [ ] Intro ASCII + affichage de ce que fait le serveur.
-- [ ] Mode debug : traces MCP, commandes lancées, sessions reprises, retentes.
-- [ ] `schema <outil>` : exposer les JSON Schema en ligne de commande.
+- [ ] Binaire Linux déposé à côté ; `sniperbot_analyst --headless --port 23090 --bridge 3011`.
+- [ ] Tests au `curl` : `/health`, `/send` vers un salon de test, `/reset`.
+- [ ] Garder overmind-mcp :3099 pour la mémoire (`memory_search` / `memory_store`) au début.
+- [ ] Basculer `!sniper` de `discord-master` vers :3011, puis arrêter `discord-llm.service` *(validé avant)*.
+- [ ] Puis `trade2`…`trade7` ; plus tard un routeur Discord en Rust (crate à part).
 
-## 5. Optionnel / plus tard
+## 7. Robustesse, perfs, distribution (PLAN §5)
 
-- [ ] Reprise Hermes par titre (`-c <agent> --create-if-missing`).
-- [ ] Sortie `--format stream-json`.
-- [ ] Authentification LiteMCP (`auth-sign`, TLS) — aujourd'hui loopback sans auth +
-      `--dangerously-skip-permissions`.
-- [ ] Survivre au redémarrage : les runs en cours perdent leur sortie (seuls PID/statut sont sur disque).
-- [ ] Latence Hermes (10–18 s, démarrage Python) : piste à étudier si gênant.
+- [ ] Smoke tests réels : Hermes (vrai modèle, reprise) et Claude (vrai jeton).
+- [ ] Tests e2e sensibles au temps : passer `resident_queue` et `multi_instance` en `eventually`.
+- [ ] Pont testé avec un agent Hermes, et `/reset` pendant un tour.
+- [ ] `pid_alive` Windows : un `tasklist` groupé par passage du balayeur, ou cache court.
+- [ ] Authentification avant toute écoute hors loopback (LiteMCP `auth-sign` / TLS ; jeton pour le pont).
+- [ ] Binaires macOS x86_64 et Linux aarch64 ; métadonnées `cargo binstall`.
+- [ ] Logo docs.rs figé sur le tag de version.
+- [ ] GitHub : image d'aperçu `assets/social-preview.jpg`, protection de `main` et des tags `v*`.
+
+## 8. Plus tard (PLAN §4.6, §4.7)
+
+- [ ] Pairs automatiques : découverte des `swarm-*`, injection dans la config MCP de chaque agent.
+- [ ] Runner générique décrit en JSON : opencode, kilo, gemini, qwen ; puis cline, openclaw, grokbot.
+- [ ] Reprise Hermes par titre (`-c <agent> --create-if-missing`), sortie `--format stream-json`.
