@@ -45,12 +45,12 @@ Exemples de spécialisations que tu peux créer avec `create_agent` et orchestre
   <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — Bus MCP multi-agents en direct" width="880" />
 </div>
 
-### Classe « Persistant uniquement » (Discord, WhatsApp & Custom)
+### Agents persistants uniquement (Discord, WhatsApp, X, Google & Custom)
 
-Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà de **Discord** (`--bridge` HTTP & MCP) et **WhatsApp**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
+Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà des connecteurs **Discord** (`--bridge` HTTP & MCP), **WhatsApp**, **X** et **Google (Gmail & Calendar)**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
 
 <div align="center">
-  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp et Custom" width="880" />
+  <img src="assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp, X, Google et Custom" width="880" />
 </div>
 
 ## Démarrage rapide
