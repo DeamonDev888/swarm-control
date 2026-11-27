@@ -17,6 +17,10 @@ pub fn kill_tree(pid: u32) {
 #[cfg(unix)]
 pub fn kill_tree(pid: u32) {
     use std::time::{Duration, Instant};
+    // 1 = init : jamais un process d'agent ; 0 et > i32::MAX : voir `valid_unix_pid`.
+    if pid == 1 || !super::alive::valid_unix_pid(pid) {
+        return;
+    }
     let group = format!("-{pid}");
     let signal = |sig: &str| {
         let _ = std::process::Command::new("kill")

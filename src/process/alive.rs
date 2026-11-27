@@ -17,9 +17,16 @@ pub fn pid_alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
+/// PID utilisable avec `kill` : `0` vise notre propre groupe, et au-delà de
+/// `i32::MAX` la valeur repasse en négatif (`u32::MAX` devient `-1` : tous les process).
+#[cfg(unix)]
+pub(super) fn valid_unix_pid(pid: u32) -> bool {
+    pid != 0 && i32::try_from(pid).is_ok()
+}
+
 #[cfg(unix)]
 pub fn pid_alive(pid: u32) -> bool {
-    if pid == 0 {
+    if !valid_unix_pid(pid) {
         return false;
     }
     std::process::Command::new("kill")
