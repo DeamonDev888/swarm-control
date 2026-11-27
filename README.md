@@ -7,6 +7,7 @@
 [![CI](https://github.com/DeamonDev888/swarm-control/actions/workflows/ci.yml/badge.svg)](https://github.com/DeamonDev888/swarm-control/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/swarm-control.svg?color=F97316)](https://crates.io/crates/swarm-control)
 [![docs.rs](https://img.shields.io/docsrs/swarm-control?color=22D3EE)](https://docs.rs/swarm-control)
+[![LiteMCP](https://img.shields.io/crates/v/litemcp.svg?label=LiteMCP&color=8B5CF6)](https://github.com/DeamonDev888/litemcp)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-F97316.svg?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![Binaire](https://img.shields.io/badge/binaire-~2%20Mio-06B6D4.svg)](#léger-mesuré)
 [![Licence](https://img.shields.io/badge/licence-MIT%20%2F%20Apache--2.0-64748B.svg)](LICENSE-MIT)
@@ -14,7 +15,7 @@
 <br />
 
 **Des agents IA qui se souviennent, tournent en continu et se parlent entre eux.**
-Un seul exécutable de 2 Mio, rien d'autre à installer.
+Un seul exécutable de 2 Mio, rien d'autre à installer — propulsé par [LiteMCP](https://github.com/DeamonDev888/litemcp).
 
 [Installer](#1-installer) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-10-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
 
@@ -49,7 +50,7 @@ Il fonctionne avec les outils d'IA en ligne de commande que vous avez déjà :
 | **Runner** | Le programme d'IA qui fait réellement le travail : `claude`, `hermes` ou `agy`. |
 | **Session** | La conversation de l'agent, sauvegardée sur disque et reprise à chaque appel. |
 | **Agent résident** | Un agent qui reste allumé et répond aux demandes au fil de l'eau, comme un bot. |
-| **MCP** | Le protocole standard qui permet à une IA (Claude Code, Cursor…) d'utiliser des outils. `swarm-control` est un serveur MCP. |
+| **MCP** | Le protocole standard qui permet à une IA (Claude Code, Cursor…) d'utiliser des outils. `swarm-control` est un serveur MCP, construit sur [LiteMCP](https://github.com/DeamonDev888/litemcp). |
 | **Workspace** | Le dossier où tout est rangé (agents, sessions, journaux). Par défaut : `~/.swarm-control`. |
 
 ---
@@ -420,7 +421,13 @@ Build `--release`, Windows 11, mémoire = *working set* du process :
 | Binaire | **≈ 2 Mio** |
 | Mémoire au repos | **≈ 7 Mio**, 5 threads |
 | 24 agents résidents au repos | **≈ 7 Mio** au total : **≈ 80 Kio et 2 threads par agent** |
-| Dépendances directes | `litemcp`, `serde`, `serde_json` (+ `ratatui` pour l'interface) — aucun runtime async |
+| Dépendances directes | [`litemcp`](https://crates.io/crates/litemcp), `serde`, `serde_json` (+ `ratatui` pour l'interface) — aucun runtime async |
+
+### Construit sur LiteMCP
+
+Le serveur MCP, la validation des arguments (JSON Schema) et l'annonce des agents résidents viennent de
+[**LiteMCP**](https://github.com/DeamonDev888/litemcp) ([crates.io](https://crates.io/crates/litemcp) · [docs.rs](https://docs.rs/litemcp)),
+une bibliothèque Rust MCP légère et synchrone (Streamable HTTP, spec `2026-07-28`). Sa latence est mesurée dans son dépôt.
 
 <details>
 <summary><b>Face aux autres projets</b></summary>
