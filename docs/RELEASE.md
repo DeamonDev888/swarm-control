@@ -11,7 +11,8 @@ Pipeline : **lint → compile → test → publication crates.io → release Git
                       + fmt · clippy -D warnings · tests · doc stricte · paquet · cargo-deny
    2. publish         crates.io, idempotent (200 déjà publié · 404 publier · autre = échec)
    3. github-release  notes = section « ## [X.Y.Z] » du CHANGELOG
-   4. binaries        Linux · macOS · Windows, archives + SHA-256 joints à la release
+   4. binaries        Linux x86_64/aarch64 · macOS arm64/x86_64 · Windows x86_64,
+                      archives + SHA-256 joints à la release
 ```
 
 La release GitHub n'existe **que si** le crate est publié : une publication crates.io est
@@ -50,6 +51,24 @@ bash scripts/release.sh 0.2.0
 git push origin main
 git push origin v0.2.0
 ```
+
+## Binaires et logo docs.rs
+
+Chaque release joint cinq archives (`.tar.gz`, ou `.zip` sous Windows) et leur `.sha256`,
+nommées `swarm-control-vX.Y.Z-<cible>` :
+
+| Cible | Runner | Note |
+|---|---|---|
+| `x86_64-unknown-linux-gnu` | `ubuntu-latest` | |
+| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` | runner ARM natif, pas de croisement (serveurs ARM, Raspberry Pi) |
+| `aarch64-apple-darwin` | `macos-latest` | |
+| `x86_64-apple-darwin` | `macos-latest` | compilé depuis le runner ARM64 (SDK universel, pas de runner Intel dédié) |
+| `x86_64-pc-windows-msvc` | `windows-latest` | |
+
+**Logo docs.rs figé sur le tag de version** : docs.rs construit la documentation et rend le
+README depuis le tag publié — les images relatives (`assets/…`) sont résolues à la révision de
+cette version. Une refonte des images sur `main` ne change donc **pas** les versions déjà
+publiées ; elle n'apparaît sur docs.rs qu'à la prochaine publication, qui la fige à son tour.
 
 ## Incidents
 
