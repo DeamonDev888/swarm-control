@@ -1,8 +1,6 @@
 <div align="center">
 
-<picture>
-  <img src="assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="880" />
-</picture>
+<img src="assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="880" />
 
 <br />
 
@@ -38,6 +36,49 @@ Lancer `claude -p` ou `hermes chat` à la main perd tout entre deux appels. `swa
 - **Orchestrés** — jusqu'à 10 agents en parallèle, runs en arrière-plan, statut, sortie en direct, `wait`, `kill` de l'arbre de processus, balayage des orphelins.
 - **MCP natif** — c'est un serveur MCP (Streamable HTTP sans état, spec `2026-07-28`, via [LiteMCP](https://crates.io/crates/litemcp)). Un agent peut donc en piloter d'autres : Claude Code appelle `run_agent` comme n'importe quel outil.
 - **Typé** — chaque outil publie un **JSON Schema** (DSL à la Zod de LiteMCP) ; les arguments sont validés avant d'atteindre le handler (`-32602` avec la liste des problèmes).
+
+## Archétypes d'agents
+
+Exemples de spécialisations que tu peux créer avec `create_agent` et orchestrer en parallèle via `run_agents_parallel` :
+
+<div align="center">
+  <img src="assets/pixel/swarm-live-strip.svg" alt="swarm-control — Bus MCP multi-agents en direct" width="880" />
+</div>
+
+<table align="center">
+  <tr>
+    <td align="center" width="135">
+      <img src="assets/classes/hornet-pixel-coordinator.svg" width="76" alt="Coordinator" /><br />
+      <strong>Coordinator</strong><br />
+      <sub>Chef d'essaim</sub>
+    </td>
+    <td align="center" width="135">
+      <img src="assets/classes/hornet-pixel-coder.svg" width="76" alt="Coder" /><br />
+      <strong>Coder</strong><br />
+      <sub>Auteur · Dev</sub>
+    </td>
+    <td align="center" width="135">
+      <img src="assets/classes/hornet-pixel-explorer.svg" width="76" alt="Explorer" /><br />
+      <strong>Explorer</strong><br />
+      <sub>Research · Scout</sub>
+    </td>
+    <td align="center" width="135">
+      <img src="assets/classes/hornet-pixel-verifier.svg" width="76" alt="Verifier" /><br />
+      <strong>Verifier</strong><br />
+      <sub>QA · Auditeur</sub>
+    </td>
+    <td align="center" width="135">
+      <img src="assets/classes/hornet-pixel-browser.svg" width="76" alt="Browser" /><br />
+      <strong>Browser</strong><br />
+      <sub>Agent Web</sub>
+    </td>
+    <td align="center" width="135">
+      <img src="assets/classes/hornet-pixel-monitor.svg" width="76" alt="Monitor" /><br />
+      <strong>Monitor</strong><br />
+      <sub>Sentinelle</sub>
+    </td>
+  </tr>
+</table>
 
 ## Démarrage rapide
 
@@ -202,5 +243,5 @@ MIT OU Apache-2.0, au choix.
 
 <div align="center">
   <br />
-  <img src="assets/logo-256.png" alt="Logo swarm-control : un frelon cybernétique" width="128" />
+  <img src="assets/pixel/hornet-pixel-logo.svg" alt="Logo swarm-control : un frelon cybernétique animé" width="128" />
 </div>
