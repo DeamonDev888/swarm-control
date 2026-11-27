@@ -57,7 +57,13 @@ git push origin v0.2.0
 Chaque release joint cinq archives (`.tar.gz`, ou `.zip` sous Windows) et leur `.sha256`,
 nommées `swarm-control-vX.Y.Z-<cible>`, plus les cinq **exécutables nus** —
 `swarm-control-vX.Y.Z-<cible>[.exe]` — et leur `.sha256` : téléchargement direct,
-sans extraction :
+sans extraction.
+
+Chaque cible recopie aussi son exécutable sous un **nom fixe sans version** —
+`swarm-control-linux-x86_64`, `swarm-control-linux-aarch64`, `swarm-control-macos-aarch64`,
+`swarm-control-macos-x86_64`, `swarm-control-windows-x86_64.exe` : le permalien
+`releases/latest/download/<nom>` pointe toujours sur la dernière version (posts
+Discord, scripts d'installation).
 
 | Cible | Runner | Note |
 |---|---|---|

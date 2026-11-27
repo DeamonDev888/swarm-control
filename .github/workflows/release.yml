@@ -8,7 +8,9 @@
 #                         jeton : secret `CARGO_REGISTRY_TOKEN`, sinon OIDC (trusted publishing) ;
 #   3. `github-release` — release GitHub, corps extrait de la section `## [X.Y.Z]` du CHANGELOG ;
 #   4. `binaries`       — binaires Linux x86_64/aarch64, macOS arm64/x86_64, Windows x86_64 :
-#                         archives (.tar.gz/.zip) ET exécutables nus, chacun avec son SHA-256.
+#                         archives (.tar.gz/.zip) ET exécutables nus, chacun avec son SHA-256,
+#                         plus l'exécutable recopié sous nom fixe sans version
+#                         (permalien releases/latest/download/<nom>).
 #
 # L'ordre est voulu : la release GitHub n'existe QUE si le crate est publié (une
 # publication crates.io est irréversible, une release GitHub se corrige).
@@ -208,8 +210,19 @@ jobs:
           }
           somme "$ARCHIVE"
           somme "$EXE"
+          # Copie sous nom fixe sans version : le permalien releases/latest/download
+          # reste valide d'une version à l'autre (posts Discord, scripts d'install).
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu) ALIAS="swarm-control-linux-x86_64" ;;
+            aarch64-unknown-linux-gnu) ALIAS="swarm-control-linux-aarch64" ;;
+            aarch64-apple-darwin) ALIAS="swarm-control-macos-aarch64" ;;
+            x86_64-apple-darwin) ALIAS="swarm-control-macos-x86_64" ;;
+            x86_64-pc-windows-msvc) ALIAS="swarm-control-windows-x86_64.exe" ;;
+          esac
+          cp "$EXE" "$ALIAS"
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
+          echo "alias=$ALIAS" >> "$GITHUB_OUTPUT"
 
       - name: Joindre à la release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
@@ -220,3 +233,4 @@ jobs:
             ${{ steps.pack.outputs.archive }}.sha256
             ${{ steps.pack.outputs.exe }}
             ${{ steps.pack.outputs.exe }}.sha256
+            ${{ steps.pack.outputs.alias }}
