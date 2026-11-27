@@ -1,6 +1,6 @@
 [package]
 name = "swarm-control"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Instancie des agents IA persistants via LiteMCP en Rust. Chaque agent créé = 1 profil et 1 exécutable : il vit, se souvient et communique avec ses pairs. Compatible Hermes (natif), Claude Code, Antigravity, grokbot, opencode, Kilo/Cline, OpenClaw, et extensible à tout runner CLI."
