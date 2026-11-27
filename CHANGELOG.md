@@ -16,6 +16,12 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
   (contexte `[DISCORD CONTEXT]`, réponse `{result, session_id}`, vide si l'agent a posté via
   MCP), `POST /reset`, `GET /status`, `GET /health` — un routeur Discord Node existant n'a qu'à
   changer de port. Les demandes passent par la file de l'agent.
+- **Runner Antigravity (`agy`)** : création, configuration, liste et exécution d'agents via le
+  CLI Antigravity en complément de Claude Code et Hermes.
+- **Identité visuelle SVG animée** : bannière principale animée, console MCP multi-agents
+  (`Coordinator`, `Coder`, `Explorer`, `Verifier`, `Browser`, `Monitor`) et classe d'agents
+  persistants (`Hornet Discord`, `Hornet WhatsApp`, `Hornet Customisable` prêt pour tout bridge
+  CLI & serveur MCP), visibles sur GitHub, crates.io et docs.rs.
 
 ### Corrigé
 - Test `control` instable : l'état disque d'un run tué est attendu au lieu d'être lu aussitôt.
