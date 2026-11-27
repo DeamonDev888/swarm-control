@@ -7,6 +7,8 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-27
+
 ### Ajouté
 - Logo en pied du README (visible sur crates.io), logo et icône d'onglet sur docs.rs,
   bannière en tête de la documentation.
