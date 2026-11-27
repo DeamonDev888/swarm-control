@@ -54,6 +54,36 @@ pub fn strip_mcp_section(yaml: &str) -> String {
     kept.join("\n").trim_end().to_string()
 }
 
+/// Blocs de la section `mcp_servers:` : (`nom`, lignes du corps telles quelles,
+/// indentées de 4). Les blocs d'un utilisateur sont ainsi réécrits à l'identique.
+pub fn mcp_blocks(yaml: &str) -> Vec<(String, Vec<String>)> {
+    let mut out = Vec::new();
+    let mut in_block = false;
+    let mut current: Option<(String, Vec<String>)> = None;
+    for line in yaml.lines() {
+        if is_top_level(line) {
+            out.extend(current.take());
+            in_block = line.trim_end() == "mcp_servers:";
+            continue;
+        }
+        if !in_block {
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        let t = line.trim();
+        if indent == 2 && t.ends_with(':') && !t.starts_with('-') {
+            out.extend(current.take());
+            current = Some((t.trim_end_matches(':').to_string(), Vec::new()));
+        } else if let Some((_, body)) = current.as_mut() {
+            if !t.is_empty() {
+                body.push(line.to_string());
+            }
+        }
+    }
+    out.extend(current);
+    out
+}
+
 /// Scalaire YAML sûr : guillemets doubles dès qu'un caractère spécial apparaît.
 pub fn yaml_scalar(s: &str) -> String {
     let plain = !s.is_empty()
@@ -84,6 +114,16 @@ mod tests {
         assert!(!stripped.contains("memory"));
         assert!(stripped.contains("agent:\n  max_turns: 4"));
         assert!(stripped.contains("provider: zai"));
+    }
+
+    #[test]
+    fn keeps_the_mcp_blocks_verbatim() {
+        let blocks = mcp_blocks(SAMPLE);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0].0, "memory");
+        assert_eq!(blocks[0].1, vec!["    url: http://x"]);
+        assert_eq!(blocks[1].0, "db");
+        assert_eq!(blocks[1].1, vec!["    command: node"]);
     }
 
     #[test]

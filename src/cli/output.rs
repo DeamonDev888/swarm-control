@@ -15,7 +15,7 @@ pub fn json(value: &Value) {
 
 /// Tableau en colonnes alignées (deux espaces entre colonnes, sans espace final).
 pub fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
-    let columns = headers.iter().count().max(rows.iter().map(Vec::len).max().unwrap_or(0));
+    let columns = headers.len().max(rows.iter().map(Vec::len).max().unwrap_or(0));
     let mut widths: Vec<usize> = vec![0; columns];
     for (i, header) in headers.iter().enumerate() {
         widths[i] = header.chars().count();

@@ -22,6 +22,11 @@ pub fn run(
         Ok(plan) => plan,
         Err(result) => return result,
     };
+    // Une ligne par commande lancée, secrets masqués (l'environnement n'est pas imprimé).
+    crate::debug!(
+        "commande {}",
+        crate::debug::command_line(&binaries::antigravity_binary(), &plan.args)
+    );
     let output = match process::run(command(req, &plan), None, live, plan.timeout, cancel) {
         Ok(output) => output,
         Err(e) => return spawn_error(&e),

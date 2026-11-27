@@ -76,6 +76,15 @@ fn peer(file: &PathBuf) -> Option<Peer> {
     })
 }
 
+impl Peer {
+    /// Annonce d'une instance d'administration (`swarm-control-N`).
+    pub fn is_instance(&self) -> bool {
+        self.name
+            .strip_prefix("swarm-control-")
+            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::peer;
@@ -95,7 +104,7 @@ mod tests {
             r#"{"name":"swarm-alice","addr":"127.0.0.1:23082","port":23082,"pid":4242}"#,
         );
         let p = peer(&file).expect("annonce lisible");
-        assert_eq!((p.agent.as_str(), p.port_url()), ("alice", "http://127.0.0.1:23082/mcp"));
+        assert_eq!((p.agent.as_str(), p.url.as_str()), ("alice", "http://127.0.0.1:23082/mcp"));
         // Un PID certainement mort (sous Windows, tasklist ne le connaît pas).
         assert!(!p.alive);
         let _ = std::fs::remove_file(file);
@@ -109,19 +118,5 @@ mod tests {
         assert!(peer(&broken).is_none());
         let _ = std::fs::remove_file(other);
         let _ = std::fs::remove_file(broken);
-    }
-}
-
-impl Peer {
-    /// URL complète (raccourci de test).
-    pub fn port_url(&self) -> &str {
-        &self.url
-    }
-
-    /// Annonce d'une instance d'administration (`swarm-control-N`).
-    pub fn is_instance(&self) -> bool {
-        self.name
-            .strip_prefix("swarm-control-")
-            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
     }
 }

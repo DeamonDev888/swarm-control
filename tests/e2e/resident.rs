@@ -40,10 +40,7 @@ fn a_resident_agent_serves_ask_and_status_and_announces_itself() {
         .map(|t| t["name"].as_str().unwrap().to_string())
         .collect();
     tools.sort();
-    assert_eq!(
-        tools,
-        ["ask", "config", "history", "logs", "session", "status", "stop"]
-    );
+    assert_eq!(tools, ["ask", "config", "history", "logs", "session", "status", "stop"]);
 
     // Annonce LiteMCP et bail d'hébergement (avec l'URL) sont publiés.
     assert!(eventually(5, || h.announce_file("swarm-alice").is_file()), "annonce absente");

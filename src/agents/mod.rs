@@ -20,6 +20,7 @@ mod lookup;
 mod mcp;
 mod name;
 mod paths;
+pub(crate) mod peers;
 mod runner;
 mod secrets;
 mod update;

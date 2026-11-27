@@ -19,6 +19,10 @@ pub fn run(
     cmd.stdin(if stdin_data.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // PLAN §4.2 : une ligne par commande lancée, secrets masqués.
+    let program = std::path::Path::new(cmd.get_program()).to_path_buf();
+    let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+    crate::debug::line("commande", crate::debug::command_line(&program, &args));
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     live.set_pid(child.id());
 

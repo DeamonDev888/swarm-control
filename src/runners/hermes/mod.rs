@@ -22,7 +22,10 @@ pub fn run(
     cancel: Option<&CancelToken>,
 ) -> RunResult {
     let timeout = config::default_timeout();
-    let cmd = command::build(req, &args::build(req, resume));
+    let args = args::build(req, resume);
+    // Une ligne par commande lancée, secrets masqués (l'environnement n'est pas imprimé).
+    crate::debug!("commande {}", crate::debug::command_line(&binaries::hermes_binary(), &args));
+    let cmd = command::build(req, &args);
     match process::run(cmd, Some(&req.prompt), live, timeout, cancel) {
         Ok(output) => outcome::from_output(req, &output, timeout, resume),
         Err(e) => RunResult::err(format!(

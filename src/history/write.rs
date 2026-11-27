@@ -2,6 +2,7 @@
 
 use super::entry::Entry;
 use super::path;
+use crate::store::now_ms;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::Path;
@@ -14,6 +15,19 @@ pub const MAX_BYTES: u64 = 5 * 1024 * 1024;
 /// Une erreur d'écriture n'interrompt jamais un tour : l'appelant la journalise sur stderr.
 pub fn append(ws: &Path, runner: &str, agent: &str, entry: &Entry) -> io::Result<()> {
     append_with_limit(ws, runner, agent, entry, max_bytes())
+}
+
+/// Consigne l'entrée d'un tour : horodatée et rattachée à `runner`/`agent` ici, puis écrite.
+///
+/// Le commun du worker résident et du tour local de la CLI (`ask`) : même format, même
+/// rotation. Une erreur d'écriture n'interrompt jamais le tour : elle sort sur stderr.
+pub fn record(ws: &Path, runner: &str, agent: &str, mut entry: Entry) {
+    entry.ts = now_ms();
+    entry.runner = runner.to_string();
+    entry.agent = agent.to_string();
+    if let Err(e) = append(ws, runner, agent, &entry) {
+        eprintln!("[swarm-control] journal du tour non écrit: {e}");
+    }
 }
 
 /// Comme [`append`], avec une limite explicite (tests de rotation).

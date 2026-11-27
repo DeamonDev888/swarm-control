@@ -6,7 +6,6 @@ use super::waiting;
 use crate::history;
 use crate::owners::Lease;
 use crate::runners::{self, RunResult};
-use crate::store::now_ms;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -54,22 +53,22 @@ fn run_turn(ctx: &Ctx, turn: Turn) {
 /// Consigne le tour dans le journal et garde sa sortie pour `logs` / la TUI.
 fn finish(ctx: &Ctx, turn: &Turn, result: &RunResult, queued_ms: u64, duration_ms: u64) {
     ctx.set_output(tail(result));
-    let entry = history::Entry {
-        ts: now_ms(),
-        from: turn.from.clone(),
-        via: turn.via.clone(),
-        prompt: turn.prompt.clone(),
-        reply: result.result.clone(),
-        error: result.error.clone(),
-        session_id: result.session_id.clone(),
-        duration_ms,
-        queued_ms,
-        runner: ctx.runner.as_str().to_string(),
-        agent: ctx.agent.clone(),
-    };
-    if let Err(e) = history::append(&ctx.workspace, ctx.runner.as_str(), &ctx.agent, &entry) {
-        eprintln!("[swarm-control] journal du tour non écrit: {e}");
-    }
+    history::record(
+        &ctx.workspace,
+        ctx.runner.as_str(),
+        &ctx.agent,
+        history::Entry {
+            from: turn.from.clone(),
+            via: turn.via.clone(),
+            prompt: turn.prompt.clone(),
+            reply: result.result.clone(),
+            error: result.error.clone(),
+            session_id: result.session_id.clone(),
+            duration_ms,
+            queued_ms,
+            ..Default::default()
+        },
+    );
 }
 
 /// Derniers 8 Kio de la sortie brute (ou de la réponse), sur une frontière de caractère.
@@ -131,7 +130,6 @@ mod tests {
     /// La sortie gardée pour `logs` est plafonnée à 8 Kio, sur une frontière de caractère.
     #[test]
     fn the_kept_output_is_bounded_on_a_char_boundary() {
-        let ctx = ctx("sortie");
         let big = "é".repeat(10_000); // 20 000 octets
         let result = RunResult { raw: big.clone(), ..Default::default() };
         let kept = tail(&result);

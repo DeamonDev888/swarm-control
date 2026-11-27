@@ -11,9 +11,9 @@ pub mod delete;
 mod env_edit;
 mod exec;
 mod file_rewrite;
-mod mcp;
+pub(crate) mod mcp;
 mod provider;
 pub mod update;
-mod yaml;
+pub(crate) mod yaml;
 
 pub use yaml::{yaml_mcp_servers, yaml_model};

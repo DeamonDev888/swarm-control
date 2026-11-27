@@ -5,7 +5,7 @@
 //! de défilement, car lui seul connaît la largeur des lignes et la hauteur de la vue.
 
 use super::info::{age_label, duration_label, short_session};
-use super::state::{Level, State, Status, wrap};
+use super::state::{Level, PeerRow, State, Status, wrap};
 use crate::history::Entry;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -102,6 +102,11 @@ fn header(frame: &mut Frame, area: Rect, st: &State) {
             dim("  ·  "),
             Span::styled(st.info.runner.clone(), Style::new().fg(Color::White)),
             dim("  ·  "),
+            Span::styled(
+                format!("modèle {}", st.model.as_deref().unwrap_or("—")),
+                Style::new().fg(Color::White),
+            ),
+            dim("  ·  "),
             Span::styled(format!("instance {}", st.info.instance), Style::new().fg(Color::White)),
             dim("  ·  "),
             badge,
@@ -131,7 +136,9 @@ fn header(frame: &mut Frame, area: Rect, st: &State) {
 }
 
 fn peers(frame: &mut Frame, area: Rect, st: &State) {
-    let block = panel(&format!("serveurs MCP ({})", st.peers.len()));
+    // Le titre donne d'emblée combien de pairs résidents sont vivants.
+    let vivants = st.peers.iter().filter(|p| p.alive).count();
+    let block = panel(&format!("serveurs MCP ({}) · {vivants} vivants", st.peers.len()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     if st.peers.is_empty() {
@@ -146,32 +153,37 @@ fn peers(frame: &mut Frame, area: Rect, st: &State) {
         frame.render_widget(Paragraph::new(lines), inner);
         return;
     }
-    let lines: Vec<Line> = st
-        .peers
-        .iter()
-        .map(|peer| {
-            let dot = if peer.alive {
-                Span::styled("● ", Style::new().fg(OK))
-            } else {
-                Span::styled("○ ", Style::new().fg(BAD))
-            };
-            let name = if peer.own {
-                Span::styled(
-                    peer.name.clone(),
-                    Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
-                )
-            } else {
-                Span::styled(peer.name.clone(), Style::new().fg(Color::White))
-            };
-            let mut spans = vec![dot, name];
-            if peer.own {
-                spans.push(Span::styled(" (vous)", Style::new().fg(ACCENT)));
-            }
-            spans.push(dim(format!("  {}", peer.addr)));
-            Line::from(spans)
-        })
-        .collect();
+    let lines: Vec<Line> = st.peers.iter().map(peer_line).collect();
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Une ligne du panneau serveurs : `●` répond, `▲` vivant mais en erreur, `○` mort.
+fn peer_line(peer: &PeerRow) -> Line<'static> {
+    let (dot, dot_color) = match peer.state.as_str() {
+        "ok" => ("● ", OK),
+        "inactif" => ("○ ", BAD),
+        _ => ("▲ ", WARN),
+    };
+    let mut spans = vec![Span::styled(dot, Style::new().fg(dot_color))];
+    if peer.own {
+        spans.push(Span::styled(
+            peer.name.clone(),
+            Style::new().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(" (vous)", Style::new().fg(ACCENT)));
+    } else {
+        spans.push(Span::styled(peer.name.clone(), Style::new().fg(Color::White)));
+    }
+    spans.push(dim(format!("  {}", peer.addr)));
+    if peer.state != "ok" {
+        spans.push(Span::styled(
+            format!("  {} · {}", peer.state, peer.detail),
+            Style::new().fg(if peer.alive { WARN } else { DIM }),
+        ));
+    } else if !peer.detail.is_empty() {
+        spans.push(dim(format!("  {}", peer.detail)));
+    }
+    Line::from(spans)
 }
 
 fn conversation(frame: &mut Frame, area: Rect, st: &mut State) {
@@ -412,6 +424,30 @@ mod tests {
         let error = lines.iter().find(|l| l.to_string().contains("erreur")).unwrap();
         assert_eq!(error.spans[0].style.fg, Some(BAD));
         assert!(lines.iter().any(|l| l.to_string().contains("boum")));
+    }
+
+    #[test]
+    fn la_ligne_de_pair_marque_le_soimeme_et_les_morts() {
+        let vous = PeerRow {
+            name: "swarm-alice".into(),
+            addr: "127.0.0.1:1".into(),
+            alive: true,
+            own: true,
+            state: "ok".into(),
+            detail: String::new(),
+        };
+        let line = peer_line(&vous).to_string();
+        assert!(line.contains("(vous)"), "ligne : {line}");
+        let mort = PeerRow {
+            name: "swarm-bob".into(),
+            addr: "127.0.0.1:2".into(),
+            alive: false,
+            own: false,
+            state: "inactif".into(),
+            detail: "PID 7 mort".into(),
+        };
+        let line = peer_line(&mort).to_string();
+        assert!(line.contains("inactif") && line.contains("PID 7 mort"), "ligne : {line}");
     }
 
     #[test]

@@ -45,3 +45,18 @@ all = { level = "warn", priority = -1 }
 strip = true
 lto = "fat"
 codegen-units = 1
+
+# `cargo binstall swarm-control` : les archives de la release GitHub portent
+# `swarm-control-v<version>-<cible>.tar.gz` (`.zip` sous Windows) et contiennent
+# le binaire dans un dossier du même nom (voir `.github/workflows/release.yml`).
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+# docs.rs : la documentation de la bibliothèque, TUI comprise.
+[package.metadata.docs.rs]
+all-features = true

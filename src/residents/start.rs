@@ -18,7 +18,8 @@ pub fn start(ws: &Path, runner: Runner, agent: &str) -> Result<HostInfo, String>
 }
 
 /// Comme [`start`], avec l'adresse d'écoute du serveur de l'agent (`host:port`) ; `None` =
-/// premier port libre de 23080..=23099.
+/// premier port libre de 23080..=23099, sauf `SWARM_AGENT_PORT` (override, voir
+/// [`server::bind`]).
 pub fn start_on(
     ws: &Path,
     runner: Runner,
@@ -60,6 +61,12 @@ pub fn start_on(
     let host = Arc::new(AgentHost::new(ctx, handle, worker));
     let info = host.info();
     table::insert(host);
+    // Pairs vivants dans la config MCP dès le démarrage de la résidence (contrat de
+    // `agents::peers`) ; un échec n'empêche pas de servir : le prochain tour refera
+    // l'injection, comme dans `runners::prepare`.
+    if let Err(e) = agents::peers::refresh(ws, runner, agent) {
+        crate::debug!("résidence {agent} ({}): refresh des pairs ignoré · {e}", runner.as_str());
+    }
     Ok(info)
 }
 

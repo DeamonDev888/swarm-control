@@ -11,7 +11,7 @@ use std::path::Path;
 
 pub fn run(options: &Options, ws: &Path) -> Result<(), String> {
     let mut docs = state::list(ws);
-    docs.sort_by(|a, b| key(a).cmp(&key(b)));
+    docs.sort_by_key(key);
     if options.json {
         output::json(&Value::Array(docs));
         return Ok(());

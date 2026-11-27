@@ -9,32 +9,43 @@ use std::path::Path;
 /// Réécrit la section `mcp_servers:` avec les `servers` demandés (connus du `.mcp.json`).
 pub fn set_hermes_mcp(ws: &Path, profile_dir: &Path, servers: &[String]) -> Result<(), String> {
     let all = global_mcp_servers(ws);
+    let blocks: Vec<(String, Vec<String>)> = servers
+        .iter()
+        .filter_map(|name| all.get(name).map(|cfg| (name.clone(), render_body(cfg))))
+        .collect();
+    write_blocks(profile_dir, &blocks)
+}
+
+/// Réécrit la section `mcp_servers:` avec des blocs déjà rendus (`nom` + lignes
+/// indentées de 4). Le reste du `config.yaml` est conservé.
+pub fn write_blocks(profile_dir: &Path, blocks: &[(String, Vec<String>)]) -> Result<(), String> {
     let config_path = profile_dir.join("config.yaml");
     let current = std::fs::read_to_string(&config_path).unwrap_or_default();
 
     let mut body = strip_mcp_section(&current);
-    let section: Vec<String> = servers
-        .iter()
-        .filter_map(|name| all.get(name).map(|cfg| render_server(name, cfg)))
-        .flatten()
-        .collect();
-    if !section.is_empty() {
+    if !blocks.is_empty() {
         body.push_str("\n\nmcp_servers:\n");
-        body.push_str(&section.join("\n"));
+        for (name, lines) in blocks {
+            body.push_str(&format!("  {name}:\n"));
+            for line in lines {
+                body.push_str(line);
+                body.push('\n');
+            }
+        }
     }
     body.push('\n');
     std::fs::write(&config_path, body).map_err(io)
 }
 
-/// Lignes YAML d'un serveur (`url` ou `command` + `args`).
-fn render_server(name: &str, cfg: &Value) -> Vec<String> {
+/// Lignes YAML du corps d'un serveur (`url` ou `command` + `args`), indentées de 4.
+pub fn render_body(cfg: &Value) -> Vec<String> {
     if let Some(url) = cfg.get("url").and_then(Value::as_str) {
-        return vec![format!("  {name}:"), format!("    url: {}", yaml_scalar(url))];
+        return vec![format!("    url: {}", yaml_scalar(url))];
     }
     let Some(command) = cfg.get("command").and_then(Value::as_str) else {
         return Vec::new();
     };
-    let mut lines = vec![format!("  {name}:"), format!("    command: {}", yaml_scalar(command))];
+    let mut lines = vec![format!("    command: {}", yaml_scalar(command))];
     let args: Vec<&str> = cfg
         .get("args")
         .and_then(Value::as_array)
@@ -49,17 +60,17 @@ fn render_server(name: &str, cfg: &Value) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::render_server;
+    use super::render_body;
     use serde_json::json;
 
     #[test]
     fn renders_url_and_command_servers() {
         assert_eq!(
-            render_server("memory", &json!({"url": "http://127.0.0.1:3099/mcp"})),
-            vec!["  memory:", "    url: http://127.0.0.1:3099/mcp"]
+            render_body(&json!({"url": "http://127.0.0.1:3099/mcp"})),
+            vec!["    url: http://127.0.0.1:3099/mcp"]
         );
-        let cmd = render_server("db", &json!({"command": "node", "args": ["db.js"]}));
-        assert_eq!(cmd, vec!["  db:", "    command: node", "    args:", "    - db.js"]);
-        assert!(render_server("x", &json!({})).is_empty());
+        let cmd = render_body(&json!({"command": "node", "args": ["db.js"]}));
+        assert_eq!(cmd, vec!["    command: node", "    args:", "    - db.js"]);
+        assert!(render_body(&json!({})).is_empty());
     }
 }

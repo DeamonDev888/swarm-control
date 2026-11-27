@@ -93,6 +93,12 @@ fn command_for(exe: &Path, root: &Path, ws: &Path, hermes_home: &Path) -> Comman
         .env("TMP", root)
         .env("TMPDIR", root)
         .env("HERMES_HOME", hermes_home)
+        // Port du serveur d'agent (`agent_start`, `--resident`, mode agent sans --port) :
+        // `0` = éphémère attribué par l'OS (voir `residents::server::bind`). Sans lui, chaque
+        // agent prend le premier port libre de la tranche fixe 23080..=23099 : le port d'un
+        // agent qu'un test vient d'arrêter serait repris par l'`agent_start` d'un test
+        // parallèle, et l'assertion « le port est bien libéré » flanche.
+        .env("SWARM_AGENT_PORT", "0")
         .env("CLAUDE_BIN", &cli)
         .env("HERMES_BIN", &cli)
         .env("AGY_BIN", &cli)

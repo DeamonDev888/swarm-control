@@ -12,11 +12,13 @@
 
 mod info;
 mod input;
+mod probe;
 mod state;
 mod ui;
 
+use crate::agents;
 use crate::history;
-use crate::peers;
+use crate::registry::{self, Status};
 use crate::residents::Ctx;
 use crate::residents::turn::Turn;
 use input::Action;
@@ -26,11 +28,12 @@ use ratatui::crossterm::cursor;
 use ratatui::crossterm::event;
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-use state::{Level, State};
+use state::{Level, PeerRow, State};
 use std::io::{self, Stdout};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::{Duration, Instant};
 
 /// Ce que la TUI demande en se fermant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,7 +49,15 @@ pub enum Exit {
 pub fn run(ctx: Arc<Ctx>, debug: bool) -> Result<Exit, String> {
     let mut screen = Screen::enter().map_err(|e| format!("terminal : {e}"))?;
     let guard = PanicGuard::install();
-    let result = event_loop(&ctx, debug, &mut screen.terminal);
+    // Les sondes (réseau borné) tournent dans leur propre fil ; sans fil, la TUI marche
+    // quand même, sans l'état des serveurs.
+    let stop = Arc::new(AtomicBool::new(false));
+    let sondes = spawn_probes(Arc::clone(&ctx), Arc::clone(&stop)).ok();
+    let result = event_loop(&ctx, debug, &mut screen.terminal, sondes.as_ref().map(|(_, rx)| rx));
+    stop.store(true, Ordering::SeqCst);
+    if let Some((handle, _)) = sondes {
+        let _ = handle.join();
+    }
     drop(guard);
     result
 }
@@ -55,10 +66,14 @@ fn event_loop(
     ctx: &Ctx,
     debug: bool,
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    probes: Option<&Receiver<ProbeMsg>>,
 ) -> Result<Exit, String> {
     let mut st = State::new(info::identify(ctx), debug, Instant::now());
+    if probes.is_none() {
+        st.say(Level::Warn, "sondes indisponibles : l'état des serveurs ne sera pas affiché");
+    }
     loop {
-        sync(ctx, &mut st);
+        sync(ctx, &mut st, probes);
         terminal.draw(|frame| ui::draw(frame, &mut st)).map_err(|e| format!("affichage : {e}"))?;
         if !event::poll(state::STATUS_EVERY).map_err(|e| format!("terminal : {e}"))? {
             continue;
@@ -71,17 +86,77 @@ fn event_loop(
     }
 }
 
-/// Relit ce qui a changé : statut (~200 ms), journal (si son empreinte a changé), pairs (~5 s).
-fn sync(ctx: &Ctx, st: &mut State) {
+/// Un message du fil des sondes vers l'interface.
+enum ProbeMsg {
+    Peers(Vec<PeerRow>),
+    Model(Option<String>),
+}
+
+/// Attente d'une sonde réseau : assez courte pour ne pas engorger le fil, assez longue
+/// pour un aller-retour HTTP local.
+const PROBE_WAIT: Duration = Duration::from_millis(700);
+
+/// Lance le fil des sondes : état des serveurs MCP du registre et modèle de l'agent,
+/// toutes les [`state::PEERS_EVERY`]. `stop` est testé par tranches de 200 ms.
+fn spawn_probes(
+    ctx: Arc<Ctx>,
+    stop: Arc<AtomicBool>,
+) -> Result<(std::thread::JoinHandle<()>, Receiver<ProbeMsg>), String> {
+    let (tx, rx) = mpsc::channel();
+    let handle = std::thread::Builder::new()
+        .name(format!("swarm-tui-probe-{}", ctx.agent))
+        .spawn(move || probe_loop(ctx, tx, stop))
+        .map_err(|e| format!("fil des sondes impossible : {e}"))?;
+    Ok((handle, rx))
+}
+
+fn probe_loop(ctx: Arc<Ctx>, tx: Sender<ProbeMsg>, stop: Arc<AtomicBool>) {
+    let period = state::PEERS_EVERY;
+    let step = Duration::from_millis(200);
+    while !stop.load(Ordering::SeqCst) {
+        let model = agents::list(&ctx.workspace)
+            .into_iter()
+            .find(|a| a.name == ctx.agent && a.runner == ctx.runner)
+            .map(|a| a.model);
+        let _ = tx.send(ProbeMsg::Model(model));
+        let peers = probe::probe_all(&ctx.agent, PROBE_WAIT);
+        let _ = tx.send(ProbeMsg::Peers(peers));
+        let mut slept = Duration::ZERO;
+        while slept < period && !stop.load(Ordering::SeqCst) {
+            std::thread::sleep(step);
+            slept += step;
+        }
+    }
+}
+
+/// Sortie en direct : celle du run en cours (registre, en mémoire), sinon la fin de la
+/// sortie du dernier tour (le `Ctx` la garde pour `logs` et la TUI).
+fn live_output(ctx: &Ctx) -> String {
+    let run = registry::find(&ctx.agent, Some(ctx.runner.as_str()));
+    match run {
+        Some(run) if run.snapshot().status == Status::Running => run.output_since(None),
+        _ => ctx.last_output(),
+    }
+}
+
+/// Relit ce qui a changé : sondes (canal du fil dédié), statut (~200 ms), journal (si son
+/// empreinte a changé). Les sondes viennent du fil dédié : ici on ne fait que vider le
+/// canal, sans jamais bloquer sur le réseau.
+fn sync(ctx: &Ctx, st: &mut State, probes: Option<&Receiver<ProbeMsg>>) {
+    if let Some(rx) = probes {
+        while let Ok(msg) = rx.try_recv() {
+            match msg {
+                ProbeMsg::Peers(peers) => st.apply_peers(peers),
+                ProbeMsg::Model(model) => st.apply_model(model),
+            }
+        }
+    }
     let due = st.timers.due(Instant::now());
     if due.status {
         st.apply_status(&ctx.status_json());
         if st.show_logs {
-            st.apply_logs(ctx.last_output());
+            st.apply_logs(live_output(ctx));
         }
-    }
-    if due.peers {
-        st.apply_peers(peers::discover());
     }
     if due.history {
         let fingerprint = history::fingerprint(&ctx.workspace, ctx.runner.as_str(), &ctx.agent);
@@ -110,12 +185,12 @@ fn handle(action: Action, st: &mut State, ctx: &Ctx) -> Option<Exit> {
         Action::Clear => st.clear_input(),
         Action::ScrollUp(lines) => st.scroll_up(lines),
         Action::ScrollDown(lines) => st.scroll_down(lines),
-        Action::Top => st.to_top(),
-        Action::Bottom => st.to_bottom(),
+        Action::Top => st.go_top(),
+        Action::Bottom => st.go_bottom(),
         Action::Logs => {
             st.toggle_logs();
             if st.show_logs {
-                st.apply_logs(ctx.last_output());
+                st.apply_logs(live_output(ctx));
             }
         }
         Action::Submit => submit(st, ctx),

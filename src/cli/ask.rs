@@ -5,7 +5,8 @@
 //!    un tour dans sa file et attend (même file, même session) ;
 //! 2. un **pair vivant** est annoncé (`swarm-<agent>`) → l'outil `ask` de son serveur MCP ;
 //! 3. sinon → un tour **local** (`runners::prepare` + `runners::execute`), même bail et même
-//!    session que l'hôte : l'agent se souvient.
+//!    session que l'hôte : l'agent se souvient. Ce seul chemin est journalisé **ici** (même
+//!    Entry que le résident) : les deux autres le sont par le résident qui exécute le tour.
 //!
 //! Le tour hébergé passe par le serveur de l'agent (et non par `runners::execute`) parce que
 //! `Turn` n'est constructible que dans `residents` : c'est la file de l'hôte qui garantit un
@@ -15,6 +16,7 @@
 
 use super::args::{ASK_MAX_TIMEOUT_MS, Options};
 use super::target;
+use crate::history;
 use crate::owners;
 use crate::peers::{self, CallError};
 use crate::residents::Ctx;
@@ -23,7 +25,7 @@ use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Après une demande d'arrêt, le temps laissé au run pour tuer son processus.
 const KILL_GRACE: Duration = Duration::from_secs(5);
@@ -77,6 +79,8 @@ fn remote(url: &str, agent: &str, prompt: &str, options: &Options) -> Result<(),
 /// Tour local : le run prend le bail de l'agent et reprend sa session, comme l'hôte.
 ///
 /// Le run tourne dans un fil pour que le délai demandé puisse l'interrompre (process tué).
+/// Le tour est journalisé comme côté résident (mêmes champs, `queuedMs` = 0) ; une demande
+/// `run_agent` sans agent nommé reste éphémère et n'emprunte jamais ce chemin.
 fn local(options: &Options, ws: &Path, agent: &str, prompt: &str) -> Result<(), String> {
     let runner = target::runner(ws, agent, options.runner)?;
     let request = RunRequest {
@@ -90,8 +94,13 @@ fn local(options: &Options, ws: &Path, agent: &str, prompt: &str) -> Result<(), 
         cwd: None,
         workspace: ws.to_path_buf(),
     };
-    let live = runners::prepare(&request)
-        .map_err(|result| result.error.unwrap_or_else(|| "run refusé.".into()))?;
+    let live = match runners::prepare(&request) {
+        Ok(live) => live,
+        Err(result) => {
+            journal(ws, runner.as_str(), agent, prompt, &result, 0);
+            return Err(result.error.unwrap_or_else(|| "run refusé.".into()));
+        }
+    };
     let (sender, receiver) = mpsc::channel::<RunResult>();
     let running = Arc::clone(&live);
     std::thread::Builder::new()
@@ -101,22 +110,73 @@ fn local(options: &Options, ws: &Path, agent: &str, prompt: &str) -> Result<(), 
             let _ = sender.send(result);
         })
         .map_err(|e| format!("thread de run impossible: {e}"))?;
+    let started = Instant::now();
     match receiver.recv_timeout(Duration::from_millis(options.timeout_ms)) {
-        Ok(result) => match result.error {
-            Some(error) => Err(error),
-            None => {
-                println!("{}", result.result);
-                Ok(())
+        Ok(result) => {
+            let duration_ms = started.elapsed().as_millis() as u64;
+            journal(ws, runner.as_str(), agent, prompt, &result, duration_ms);
+            match result.error {
+                Some(error) => Err(error),
+                None => {
+                    println!("{}", result.result);
+                    Ok(())
+                }
             }
-        },
+        }
         Err(RecvTimeoutError::Disconnected) => {
-            Err("le run s'est interrompu sans rendre de résultat.".into())
+            let error = "le run s'est interrompu sans rendre de résultat.";
+            journal(
+                ws,
+                runner.as_str(),
+                agent,
+                prompt,
+                &RunResult::err(error),
+                started.elapsed().as_millis() as u64,
+            );
+            Err(error.into())
         }
         Err(RecvTimeoutError::Timeout) => {
+            let duration_ms = started.elapsed().as_millis() as u64;
             live.request_kill();
             // Laisse au run le temps de tuer son process avant que ce process-ci ne sorte.
             let _ = receiver.recv_timeout(KILL_GRACE);
-            Err(format!("pas de réponse après {} ms : le run est interrompu.", options.timeout_ms))
+            let error =
+                format!("pas de réponse après {} ms : le run est interrompu.", options.timeout_ms);
+            journal(
+                ws,
+                runner.as_str(),
+                agent,
+                prompt,
+                &RunResult::err(error.clone()),
+                duration_ms,
+            );
+            Err(error)
         }
     }
+}
+
+/// Journalise un tour local comme le ferait le résident qui l'exécute : même Entry,
+/// `from` = cette instance, `queuedMs` = 0 (pas de file ; la durée couvre le run).
+fn journal(
+    ws: &Path,
+    runner: &str,
+    agent: &str,
+    prompt: &str,
+    result: &RunResult,
+    duration_ms: u64,
+) {
+    history::record(
+        ws,
+        runner,
+        agent,
+        history::Entry {
+            from: Some(owners::instance_name()),
+            prompt: prompt.to_string(),
+            reply: result.result.clone(),
+            error: result.error.clone(),
+            session_id: result.session_id.clone(),
+            duration_ms,
+            ..Default::default()
+        },
+    );
 }

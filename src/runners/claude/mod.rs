@@ -35,6 +35,11 @@ pub fn run(
     let mut last = RunResult::default();
 
     for (i, token) in tokens.iter().enumerate() {
+        // Une ligne par commande lancée, secrets masqués (l'environnement n'est pas imprimé).
+        crate::debug!(
+            "commande {}",
+            crate::debug::command_line(&binaries::claude_binary(), &plan.args)
+        );
         let output = match process::run(
             command(req, &plan, *token),
             Some(&plan.stdin_prompt),
@@ -50,6 +55,12 @@ pub fn run(
             last.error.is_some() && output.end == End::Exited && retry::is_retryable(&output);
         let more = i + 1 < tokens.len();
         if retryable && more && !live.kill_requested() {
+            crate::debug!(
+                "retente {} ({}): jeton de secours n°{}",
+                req.agent.as_deref().unwrap_or("?"),
+                req.runner.as_str(),
+                i + 1
+            );
             continue;
         }
         if retryable && tokens.len() > 1 {

@@ -36,6 +36,7 @@ pub fn read(
 }
 
 /// `(taille, mtime en ms)` du journal courant : la TUI ne relit que s'il a changé.
+#[cfg(any(test, feature = "tui"))]
 pub fn fingerprint(ws: &std::path::Path, runner: &str, agent: &str) -> (u64, u64) {
     let file = path::path(ws, runner, agent);
     let Ok(meta) = file.metadata() else { return (0, 0) };

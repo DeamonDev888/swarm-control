@@ -13,7 +13,6 @@
 //! [`Ctx`]: crate::residents::Ctx
 
 use crate::history::Entry;
-use crate::peers::Peer;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
@@ -111,7 +110,8 @@ impl Status {
     }
 }
 
-/// Un pair annoncé, prêt à afficher.
+/// Un pair annoncé, prêt à afficher : la découverte ([`crate::peers::discover`]) fournit nom,
+/// adresse, vie et « soi », la sonde (`probe`) ajoute l'état du serveur et son détail.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PeerRow {
     pub name: String,
@@ -119,6 +119,10 @@ pub struct PeerRow {
     pub alive: bool,
     /// Est-ce l'agent que cette TUI pilote ?
     pub own: bool,
+    /// État de la sonde : `ok`, `inactif`, `injoignable`, `erreur`, `protocole`.
+    pub state: String,
+    /// Détail court : état de file renvoyé par `status`, ou raison de l'échec.
+    pub detail: String,
 }
 
 /// Horloges des rafraîchissements ; `due` dit ce qui doit être relu maintenant.
@@ -126,7 +130,6 @@ pub struct PeerRow {
 pub struct Timers {
     status: Instant,
     history: Instant,
-    peers: Instant,
 }
 
 /// Ce qui doit être rafraîchi à cet instant.
@@ -134,7 +137,6 @@ pub struct Timers {
 pub struct Due {
     pub status: bool,
     pub history: bool,
-    pub peers: bool,
 }
 
 impl Timers {
@@ -144,7 +146,6 @@ impl Timers {
         Timers {
             status: now.checked_sub(STATUS_EVERY).unwrap_or(now),
             history: now.checked_sub(STATUS_EVERY).unwrap_or(now),
-            peers: now.checked_sub(PEERS_EVERY).unwrap_or(now),
         }
     }
 
@@ -152,16 +153,12 @@ impl Timers {
         let due = Due {
             status: now.saturating_duration_since(self.status) >= STATUS_EVERY,
             history: now.saturating_duration_since(self.history) >= STATUS_EVERY,
-            peers: now.saturating_duration_since(self.peers) >= PEERS_EVERY,
         };
         if due.status {
             self.status = now;
         }
         if due.history {
             self.history = now;
-        }
-        if due.peers {
-            self.peers = now;
         }
         due
     }
@@ -213,11 +210,11 @@ impl Conversation {
         self.offset = self.offset.saturating_sub(lines);
     }
 
-    pub fn to_top(&mut self) {
+    pub fn go_top(&mut self) {
         self.offset = self.max_offset;
     }
 
-    pub fn to_bottom(&mut self) {
+    pub fn go_bottom(&mut self) {
         self.offset = 0;
     }
 
@@ -261,6 +258,10 @@ fn trim(mut entries: Vec<Entry>) -> Vec<Entry> {
     entries
 }
 
+/// Fin de la sortie brute gardée pour le panneau logs (octets) : au-delà, on replie du
+/// vide dans le panneau, pas des méga-octets à chaque image.
+const OUTPUT_TAIL: usize = 16 * 1024;
+
 /// Tout l'état de la TUI.
 #[derive(Clone, Debug)]
 pub struct State {
@@ -271,7 +272,10 @@ pub struct State {
     pub notice: Option<Notice>,
     pub status: Status,
     pub conversation: Conversation,
+    /// Serveurs MCP du registre, avec l'état de leur dernière sonde (fil des sondes).
     pub peers: Vec<PeerRow>,
+    /// Modèle de l'agent, relu par le fil des sondes (`agents::list`).
+    pub model: Option<String>,
     pub logs: String,
     /// `(taille, mtime)` du journal lors de la dernière relecture ; `None` = jamais lu.
     pub fingerprint: Option<(u64, u64)>,
@@ -289,6 +293,7 @@ impl State {
             status: Status::default(),
             conversation: Conversation::default(),
             peers: Vec::new(),
+            model: None,
             logs: String::new(),
             fingerprint: None,
             timers: Timers::new(now),
@@ -350,23 +355,21 @@ impl State {
     }
 
     pub fn apply_logs(&mut self, text: String) {
-        self.logs = text;
+        self.logs = tail(&text, OUTPUT_TAIL);
     }
 
     pub fn apply_history(&mut self, entries: Vec<Entry>) {
         self.conversation.refresh(entries);
     }
 
-    pub fn apply_peers(&mut self, peers: Vec<Peer>) {
-        self.peers = peers
-            .into_iter()
-            .map(|p| PeerRow {
-                own: p.agent == self.info.agent,
-                addr: p.url.trim_start_matches("http://").trim_end_matches("/mcp").to_string(),
-                name: p.agent,
-                alive: p.alive,
-            })
-            .collect();
+    /// La liste des serveurs sondés, déjà triée par [`probe_all`] (vivants d'abord, par nom).
+    pub fn apply_peers(&mut self, peers: Vec<PeerRow>) {
+        self.peers = peers;
+    }
+
+    /// Le modèle relu par le fil des sondes.
+    pub fn apply_model(&mut self, model: Option<String>) {
+        self.model = model;
     }
 
     pub fn scroll_up(&mut self, lines: usize) {
@@ -377,12 +380,12 @@ impl State {
         self.conversation.scroll_down(lines);
     }
 
-    pub fn to_top(&mut self) {
-        self.conversation.to_top();
+    pub fn go_top(&mut self) {
+        self.conversation.go_top();
     }
 
-    pub fn to_bottom(&mut self) {
-        self.conversation.to_bottom();
+    pub fn go_bottom(&mut self) {
+        self.conversation.go_bottom();
     }
 }
 
@@ -413,6 +416,18 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
         lines.push(rest.into_iter().collect::<String>().trim_end().to_string());
     }
     lines
+}
+
+/// Fin d'un texte (jusqu'à `max` octets), coupé sur une frontière de caractère.
+pub fn tail(text: &str, max: usize) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let mut start = text.len() - max;
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    text[start..].to_string()
 }
 
 #[cfg(test)]
@@ -493,9 +508,9 @@ mod tests {
         assert_eq!(c.offset(), 0);
         assert!(c.following());
         c.scroll_up(2);
-        c.to_top();
+        c.go_top();
         assert_eq!(c.offset(), 10);
-        c.to_bottom();
+        c.go_bottom();
         assert_eq!(c.offset(), 0);
         // Un contenu plus court que la vue ne laisse aucun décalage possible.
         c.set_max_offset(0);
@@ -560,39 +575,53 @@ mod tests {
     fn les_horloges_ne_sonnent_qu_a_echeance() {
         let t0 = Instant::now();
         let mut timers = Timers::new(t0);
-        assert_eq!(timers.due(t0), Due { status: true, history: true, peers: true });
+        assert_eq!(timers.due(t0), Due { status: true, history: true });
         let soon = t0 + Duration::from_millis(199);
         assert_eq!(timers.due(soon), Due::default());
         let after = t0 + STATUS_EVERY;
         let due = timers.due(after);
-        assert!(due.status && due.history && !due.peers);
-        let later = t0 + PEERS_EVERY;
-        assert!(timers.due(later).peers);
+        assert!(due.status && due.history);
     }
 
     #[test]
-    fn les_pairs_marquent_l_agent_courant() {
+    fn les_pairs_sondes_marquent_l_agent_courant() {
         let mut st = state();
-        st.apply_peers(vec![
-            Peer {
-                name: "swarm-alice".into(),
-                agent: "alice".into(),
-                url: "http://127.0.0.1:1/mcp".into(),
-                pid: 1,
-                alive: true,
-            },
-            Peer {
-                name: "swarm-bob".into(),
-                agent: "bob".into(),
-                url: "http://127.0.0.1:2/mcp".into(),
-                pid: 2,
-                alive: false,
-            },
-        ]);
+        let mut alice = peer("swarm-alice", "http://127.0.0.1:1/mcp", true);
+        alice.own = true;
+        st.apply_peers(vec![alice, peer("swarm-bob", "http://127.0.0.1:2/mcp", false)]);
         assert_eq!(st.peers.len(), 2);
         assert!(st.peers[0].own && st.peers[0].alive);
         assert_eq!(st.peers[0].addr, "127.0.0.1:1");
+        assert_eq!(st.peers[0].state, "ok");
         assert!(!st.peers[1].own && !st.peers[1].alive);
+        assert_eq!(st.peers[1].state, "inactif");
+    }
+
+    /// Un serveur du registre, prêt à afficher (les champs viennent de `probe`).
+    fn peer(name: &str, url: &str, alive: bool) -> PeerRow {
+        PeerRow {
+            name: name.into(),
+            addr: crate::tui::probe::addr_of(url),
+            alive,
+            own: false,
+            state: if alive { "ok".into() } else { "inactif".into() },
+            detail: String::new(),
+        }
+    }
+
+    #[test]
+    fn le_modele_relu_par_les_sondes_est_garde() {
+        let mut st = state();
+        assert_eq!(st.model, None);
+        st.apply_model(Some("claude-sonnet-4-5".into()));
+        assert_eq!(st.model.as_deref(), Some("claude-sonnet-4-5"));
+    }
+
+    #[test]
+    fn la_sortie_est_bornee_sur_une_frontiere_de_caractere() {
+        assert_eq!(tail("court", 100), "court");
+        let long = "é".repeat(50); // 2 octets par é : une coupe brute casserait un caractère.
+        assert_eq!(tail(&long, 11), "é".repeat(5));
     }
 
     #[test]

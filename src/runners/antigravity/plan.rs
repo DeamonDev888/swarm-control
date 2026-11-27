@@ -85,11 +85,8 @@ mod tests {
         let ws = std::env::temp_dir().join(format!("swarm-agy-plan-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&ws);
         std::fs::create_dir_all(&ws).unwrap();
-        std::fs::write(
-            ws.join("model-aliases.json"),
-            r#"{"neon":"gemini-4-neon-medium"}"#,
-        )
-        .unwrap();
+        std::fs::write(ws.join("model-aliases.json"), r#"{"neon":"gemini-4-neon-medium"}"#)
+            .unwrap();
         agents::create(
             &ws,
             &CreateArgs {

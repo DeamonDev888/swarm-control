@@ -99,6 +99,9 @@ fn handle(a: Args) -> ToolResult {
         out["warnings"] = json!(created.warnings);
     }
     if a.executable || a.unit {
+        if a.unit {
+            ensure_unit_supported()?;
+        }
         let exe = install_binary(&ws, &a.name)?;
         out["executable"] = json!(exe.display().to_string());
         if a.unit {
@@ -113,6 +116,22 @@ fn handle(a: Args) -> ToolResult {
         add_residency(&mut out, &ws, runner, &a.name);
     }
     Ok(out)
+}
+
+/// L'unit systemd n'a de sens que sous Linux : hors Linux, l'option est
+/// refusée avant toute copie de binaire, avec l'erreur claire attendue.
+#[cfg(target_os = "linux")]
+fn ensure_unit_supported() -> Result<(), ToolError> {
+    Ok(())
+}
+
+/// Voir `ensure_unit_supported` : le message dit ce qui existe déjà.
+#[cfg(not(target_os = "linux"))]
+fn ensure_unit_supported() -> Result<(), ToolError> {
+    Err(invalid(
+        "unit:true : non supporté ici (Linux uniquement). L'agent est créé avec ses fichiers ; \
+         relancez sans unit, ou générez l'unité sur l'hôte Linux.",
+    ))
 }
 
 /// L'agent est créé quoi qu'il arrive : un échec d'exécutable le dit, plutôt que de le taire.
