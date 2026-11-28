@@ -1,0 +1,13 @@
+{
+  "agent": "alice",
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [],
+  "env": {
+    "AGENT_TIMEOUT_MS": "3000000",
+    "ANTHROPIC_AUTH_TOKEN": "primary-token",
+    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+    "ANTHROPIC_MODEL": "claude-sonnet-4-6",
+    "agent": "alice"
+  },
+  "runner": "claude"
+}

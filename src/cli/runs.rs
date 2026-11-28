@@ -55,11 +55,11 @@ mod tests {
     #[test]
     fn a_run_row_shows_status_pid_and_end() {
         let doc = json!({
-            "agent": "sniper",
+            "agent": "discord",
             "runner": "claude",
             "lastRun": {"status": "done", "pid": 4212, "ts": 1_600_000_000_000u64},
         });
-        assert_eq!(cells(&doc), ["sniper", "claude", "done", "4212", "2020-09-13 12:26:40Z"]);
+        assert_eq!(cells(&doc), ["discord", "claude", "done", "4212", "2020-09-13 12:26:40Z"]);
     }
 
     #[test]

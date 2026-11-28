@@ -140,9 +140,9 @@ mod tests {
     #[test]
     fn summarises_a_hosted_agent() {
         let text = summary(&json!({
-            "agent": "sniper",
+            "agent": "discord",
             "runner": "claude",
-            "name": "swarm-sniper",
+            "name": "swarm-discord",
             "url": "http://127.0.0.1:23082/mcp",
             "instance": "swarm-control-1",
             "state": "busy",
@@ -152,7 +152,7 @@ mod tests {
             "turnsDone": 7,
             "lastTurn": {"ok": true, "error": null, "durationMs": 1200, "at": 1_600_000_000_000u64},
         }));
-        assert!(text.contains("agent    : sniper (claude)"), "{text}");
+        assert!(text.contains("agent    : discord (claude)"), "{text}");
         assert!(text.contains("serveur  : http://127.0.0.1:23082/mcp"), "{text}");
         assert!(text.contains("état     : occupé · file 2 · 7 tour(s)"), "{text}");
         assert!(text.contains("en cours : demandé par swarm-control-1 · 1,5 s"), "{text}");

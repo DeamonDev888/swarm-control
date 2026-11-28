@@ -1,0 +1,3 @@
+model:
+  default: MiniMax-M3
+# model.provider=minimax-cn

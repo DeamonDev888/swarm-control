@@ -47,7 +47,10 @@ pub fn acquire_at(dir: &Path, file: &Path, holder: Holder) -> Result<Lease, Busy
                 crate::debug!("bail pris {} · {}", file.display(), holder.run_id);
                 return Ok(Lease::new(file.to_path_buf(), holder.run_id.clone()));
             }
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+            // Déjà pris (os 80/183), ou nom en suppression (os 5) sous Windows :
+            // réessayer, ne jamais abandonner dessus.
+            Err(e)
+                if matches!(e.kind(), ErrorKind::AlreadyExists | ErrorKind::PermissionDenied) => {}
             Err(e) => {
                 crate::debug!("bail ✗ {} · {e}", file.display());
                 return Err(Busy::Io(e.to_string()));
@@ -69,7 +72,18 @@ pub fn acquire_at(dir: &Path, file: &Path, holder: Holder) -> Result<Lease, Busy
             }
             _ => {
                 crate::debug!("bail périmé {} · reprise", file.display());
-                takeover::remove_if_stale(file);
+                match takeover::take_over(file, &holder) {
+                    // Gagné sous la garde : le remplacement est déjà créé.
+                    Ok(true) => {
+                        crate::debug!("bail repris {} · {}", file.display(), holder.run_id);
+                        return Ok(Lease::new(file.to_path_buf(), holder.run_id.clone()));
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        crate::debug!("bail ✗ {} · reprise : {e}", file.display());
+                        return Err(Busy::Io(e.to_string()));
+                    }
+                }
             }
         }
     }
@@ -78,7 +92,7 @@ pub fn acquire_at(dir: &Path, file: &Path, holder: Holder) -> Result<Lease, Busy
 }
 
 /// Création exclusive : une seule des tentatives concurrentes réussit.
-fn try_create(file: &Path, holder: &Holder) -> std::io::Result<()> {
+pub(super) fn try_create(file: &Path, holder: &Holder) -> std::io::Result<()> {
     let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(file)?;
     f.write_all(&serde_json::to_vec(holder).map_err(std::io::Error::other)?)
 }

@@ -3,11 +3,77 @@
 use crate::harness::{command, fake_cli, start, start_sharing, start_sharing_with_args};
 use crate::resident::eventually;
 use crate::rpc::{call, host_file, ok, ok_at, port_of};
-use serde_json::json;
+use serde_json::{Value, json};
+use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::time::Duration;
 
 fn is_listening(port: u16) -> bool {
     TcpStream::connect(("127.0.0.1", port)).is_ok()
+}
+
+/// Tente un `initialize` MCP sur `port` (même profil HTTP que `rpc::rpc_at`) ; rend le
+/// nom que le serveur qui répond s'annonce (`serverInfo.name`), ou `None` si le port ne
+/// répond pas : refus de connexion, silence, ou réponse illisible.
+fn announced_name(port: u16) -> Option<String> {
+    let params = json!({
+        "protocolVersion": "2026-07-28",
+        "capabilities": {},
+        "clientInfo": {"name": "e2e", "version": "0"},
+        "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {}
+        }
+    });
+    let body =
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": params}).to_string();
+    let head = format!(
+        "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nAccept: application/json\r\n\
+         MCP-Protocol-Version: 2026-07-28\r\nMcp-Method: initialize\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(500)).ok()?;
+    stream.set_read_timeout(Some(Duration::from_secs(5))).ok()?;
+    stream.write_all(head.as_bytes()).ok()?;
+    stream.write_all(body.as_bytes()).ok()?;
+    let mut raw = String::new();
+    stream.read_to_string(&mut raw).ok()?;
+    let (headers, payload) = raw.split_once("\r\n\r\n")?;
+    let payload = if headers.to_lowercase().contains("transfer-encoding: chunked") {
+        dechunk(payload)
+    } else {
+        payload.to_string()
+    };
+    let value: Value = serde_json::from_str(payload.trim()).ok()?;
+    value["result"]["serverInfo"]["name"].as_str().map(String::from)
+}
+
+/// Déchunkage minimal d'un corps HTTP chunked (même logique que rpc.rs, qui n'expose pas
+/// cette aide).
+fn dechunk(mut s: &str) -> String {
+    let mut out = String::new();
+    while let Some((size, rest)) = s.split_once("\r\n") {
+        let n = usize::from_str_radix(size.trim(), 16).unwrap_or(0);
+        if n == 0 || rest.len() < n {
+            break;
+        }
+        out.push_str(&rest[..n]);
+        s = rest[n..].trim_start_matches("\r\n");
+    }
+    out
+}
+
+/// Le port ne sert plus **cet** agent : le port vient d'être libéré, mais le serveur
+/// d'un test parallèle peut l'avoir aussitôt repris (premier port libre de la tranche
+/// 23080-23099, ou réattribution OS) — « le port est fermé » n'est donc pas une
+/// condition fiable en suite complète. On accepte ici : refus de connexion, silence,
+/// ou un serveur qui répond sans s'annoncer `swarm-alice`.
+fn no_longer_serves_agent(port: u16) -> bool {
+    match announced_name(port) {
+        Some(name) => name != "swarm-alice",
+        None => true,
+    }
 }
 
 #[test]
@@ -24,7 +90,9 @@ fn agent_stop_closes_the_server_and_frees_everything() {
     assert!(err && msg.to_string().contains("résident"), "{msg}");
 
     ok(&h, "agent_stop", json!({"name": "alice"}));
-    assert!(eventually(10, || !is_listening(port)), "le serveur de l'agent écoute encore");
+    // Le port peut être repris à chaud par un autre test : on vérifie que **cet** agent
+    // n'y est plus servi, pas que le port soit fermé (voir `no_longer_serves_agent`).
+    assert!(eventually(10, || no_longer_serves_agent(port)), "le serveur de l'agent écoute encore");
     assert!(eventually(5, || !h.announce_file("swarm-alice").exists()), "annonce non retirée");
     assert!(eventually(5, || !host_file(&h.ws, "claude", "alice").exists()), "bail non libéré");
 

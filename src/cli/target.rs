@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn agent_names_are_checked_before_any_io() {
-        assert!(validate("sniper_2").is_ok());
+        assert!(validate("discord_2").is_ok());
         assert!(validate("../x").is_err());
         assert!(validate("").is_err());
     }

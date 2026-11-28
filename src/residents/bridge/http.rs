@@ -97,12 +97,14 @@ pub fn respond(stream: &mut TcpStream, status: u16, body: &Value) {
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        202 => "Accepted",
         400 => "Bad Request",
         401 => "Unauthorized",
         404 => "Not Found",
         405 => "Method Not Allowed",
         411 => "Length Required",
         413 => "Payload Too Large",
+        429 => "Too Many Requests",
         431 => "Request Header Fields Too Large",
         503 => "Service Unavailable",
         504 => "Gateway Timeout",
@@ -137,9 +139,39 @@ pub fn client_gone(stream: &mut TcpStream) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::client_gone;
+    use super::{client_gone, reason, respond};
+    use serde_json::json;
+    use std::io::Read;
     use std::net::{TcpListener, TcpStream};
     use std::time::{Duration, Instant};
+
+    /// Les statuts du pont ont tous une raison HTTP ; l'accusé async et la file pleine inclus.
+    #[test]
+    fn every_status_of_the_bridge_has_its_reason() {
+        assert_eq!(reason(202), "Accepted");
+        assert_eq!(reason(429), "Too Many Requests");
+        for status in [200, 202, 400, 401, 404, 405, 411, 413, 429, 431, 503, 504] {
+            assert_ne!(reason(status), "Internal Server Error", "statut {status}");
+        }
+        assert_eq!(reason(418), "Internal Server Error", "inconnu : raison générique");
+    }
+
+    /// Une réponse s'écrit en entier : ligne de statut, en-têtes, corps JSON, puis la connexion
+    /// est fermée (le client lit jusqu'à la fin de flux).
+    #[test]
+    fn a_response_is_written_in_full_then_the_connection_closes() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        respond(&mut server, 429, &json!({"error": "file pleine"}));
+        drop(server);
+        let mut reponse = String::new();
+        client.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        client.read_to_string(&mut reponse).unwrap();
+        assert!(reponse.starts_with("HTTP/1.1 429 Too Many Requests\r\n"), "{reponse}");
+        assert!(reponse.contains("Content-Type: application/json"), "{reponse}");
+        assert!(reponse.ends_with("{\"error\":\"file pleine\"}"), "{reponse}");
+    }
 
     #[test]
     fn sees_a_client_close_and_keeps_a_live_one() {

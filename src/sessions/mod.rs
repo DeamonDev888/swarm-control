@@ -1,12 +1,10 @@
 //! Sessions persistantes d'un agent.
 //!
-//! La session vit dans le fichier d'état de l'agent (`state/`). L'ancien fichier
-//! partagé `bridge/agents.json` de l'OverMind TS reste **lu** (repli), jamais écrit.
+//! La session vit dans le fichier d'état de l'agent (`state/`).
 
 mod delete;
 mod entry;
 mod get;
-mod legacy;
 mod save;
 
 #[cfg(test)]

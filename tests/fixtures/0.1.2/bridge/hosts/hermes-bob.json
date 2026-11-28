@@ -1,0 +1,9 @@
+{
+  "agent": "bob",
+  "instance": "swarm-control-1",
+  "pid": 28936,
+  "run_id": "host-28936-1",
+  "runner": "hermes",
+  "ts": 1795833773896,
+  "url": "http://127.0.0.1:23082/mcp"
+}

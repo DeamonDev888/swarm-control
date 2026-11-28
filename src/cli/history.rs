@@ -83,7 +83,7 @@ mod tests {
             reply: "calme".into(),
             duration_ms: 1_200,
             runner: "claude".into(),
-            agent: "sniper".into(),
+            agent: "discord".into(),
             ..Default::default()
         };
         let text = line(&entry);

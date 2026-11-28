@@ -1,6 +1,6 @@
 //! Jeton partagé : authentification des serveurs MCP et refus d'une écoute exposée sans jeton.
 //!
-//! Le jeton vient de `SWARM_TOKEN` (ou `OVERMIND_TOKEN`), lu par la configuration habituelle
+//! Le jeton vient de `SWARM_TOKEN`, lu par la configuration habituelle
 //! (environnement puis `.env`). Sans jeton, l'écoute reste celle d'aujourd'hui : **loopback
 //! uniquement**. Écouter sur une autre interface sans jeton est refusé au démarrage.
 //!

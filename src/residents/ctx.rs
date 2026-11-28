@@ -95,3 +95,59 @@ impl Ctx {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Ctx;
+    use crate::agents::Runner;
+    use crate::runners::RunResult;
+    use crate::sessions;
+    use serde_json::json;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    /// Un Ctx sur un workspace temporaire unique (pid + nom du test) : aucun serveur démarré.
+    fn ctx(name: &str) -> Ctx {
+        let ws = std::env::temp_dir().join(format!("swarm-ctx-{}-{name}", std::process::id()));
+        Ctx::new(name, Runner::Claude, ws, "swarm-control-1".into())
+    }
+
+    #[test]
+    fn le_reset_demande_pendant_un_tour_survit_a_la_fin_du_tour() {
+        let ctx = ctx("differe");
+        ctx.begin_turn(Some("bob".into()), "run-1");
+        // Pendant un tour, le reset oublie la session tout de suite MAIS pose le drapeau :
+        // le run en cours réenregistrera sa session en finissant, il faudra la re-oublier.
+        assert!(!ctx.reset_session(), "aucune session sur disque au départ");
+        assert!(ctx.reset_after_turn.load(Ordering::SeqCst), "un tour tourne : différé");
+        // Le tour se termine et enregistre SA session — ce qu'un reset immédiat raterait.
+        sessions::save(&ctx.workspace, ctx.runner.as_str(), &ctx.agent, "session-du-tour").unwrap();
+        // Ordre du worker (worker.rs) : le drapeau est consommé avant de publier la fin.
+        ctx.apply_pending_reset();
+        assert_eq!(
+            sessions::get(&ctx.workspace, ctx.runner.as_str(), &ctx.agent),
+            None,
+            "la session du tour est oubliée"
+        );
+        assert!(!ctx.reset_after_turn.load(Ordering::SeqCst), "consommé une seule fois (swap)");
+        ctx.end_turn(&RunResult::err("boum"), Duration::from_millis(42));
+        let status = ctx.status_json();
+        assert_eq!(status["state"], json!("idle"));
+        assert_eq!(status["turnsDone"], json!(1));
+        assert_eq!(status["lastTurn"]["error"], json!("boum"));
+    }
+
+    #[test]
+    fn sans_tour_en_cours_le_reset_est_immediat_sans_drapeau() {
+        let ctx = ctx("immediat");
+        sessions::save(&ctx.workspace, ctx.runner.as_str(), &ctx.agent, "sess").unwrap();
+        assert!(ctx.reset_session(), "la session existait");
+        assert!(
+            !ctx.reset_after_turn.load(Ordering::SeqCst),
+            "personne ne tourne : rien à différer"
+        );
+        // Un worker qui passerait derrière ne re-oublierait rien : no-op.
+        ctx.apply_pending_reset();
+        assert_eq!(sessions::get(&ctx.workspace, ctx.runner.as_str(), &ctx.agent), None);
+    }
+}

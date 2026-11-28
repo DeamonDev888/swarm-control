@@ -9,12 +9,14 @@
 //! | `session`| voir / oublier / forcer la session                     |
 //! | `logs`   | fin de la sortie du dernier tour                       |
 //! | `config` | fichiers de configuration (secrets masqués)            |
+//! | `memory` | mémoire native : `memory_store` / `memory_search` / `memory_forget` |
 
 mod ask;
 mod chain;
 mod config;
 mod history;
 mod logs;
+mod memory;
 mod session;
 mod status;
 mod stop;
@@ -30,5 +32,6 @@ pub fn register(builder: ServerBuilder, ctx: Arc<Ctx>) -> ServerBuilder {
     let builder = session::register(builder, Arc::clone(&ctx));
     let builder = logs::register(builder, Arc::clone(&ctx));
     let builder = config::register(builder, Arc::clone(&ctx));
+    let builder = memory::register(builder, Arc::clone(&ctx));
     stop::register(builder, ctx)
 }

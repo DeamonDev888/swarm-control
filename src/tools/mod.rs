@@ -26,7 +26,9 @@ mod get_agent_configs;
 mod list_agents;
 mod run_agent;
 mod run_agents_parallel;
-mod run_args;
+/// `pub(crate)` : le runner Claude lit l'archétype courant du tour (permissions
+/// restreintes explorer/verifier, PLAN §4.3) — poser par `run_agent` / `run_agents_parallel`.
+pub(crate) mod run_args;
 mod schema;
 mod update_agent_config;
 

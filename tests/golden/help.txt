@@ -1,0 +1,48 @@
+swarm-control <version> — agents persistants (Claude Code, Hermes, Antigravity) en MCP
+
+USAGE (instance) : swarm-control [--port N] [--host H] [--workspace DIR] [--instance N] [--resident AGENT[,AGENT…]]
+                   | swarm-control <commande>
+USAGE (agent)    : swarm-control --agent AGENT [--port N] [--bridge N] [--host H] [--workspace DIR]
+                   (développement et tests) ou le binaire compilé de l'agent (`discord`,
+                   `discord.exe` : create_agent {executable:true} ou `build <agent>`)
+                   | discord <commande>
+
+Commandes d'agent (binaire compilé ou --agent) :
+  serve                sert l'agent (comportement par défaut sans commande)
+  ask "<prompt>"       un tour : via son serveur s'il tourne, sinon exécuté ici
+                       (même bail de run, même session reprise)
+  status               état : hébergé ici, annoncé ailleurs, ou connu du disque
+  history [-n N]       les N derniers tours du journal (défaut 20) ; --before MS
+                       remonte page par page
+  reset                oublie la session (le prochain tour repart à neuf)
+  config [--file NOM]  fichiers de l'agent, secrets masqués (filtre par sous-chaîne)
+  schema <outil>       schéma d'entrée d'un outil servi par un serveur qui tourne
+                       (`--port N`, le serveur de l'agent, ou une instance vivante)
+
+Commandes d'instance :
+  agents               agents du workspace et leur résidence
+  run <agent> "<prompt>"  un tour d'agent (à son hôte s'il est résident ailleurs)
+  runs                 dernier run de chaque agent (fichiers d'état)
+  build <agent>        recompile le binaire dédié de l'agent (cargo build --release ;
+                       journal dans <workspace>/logs/build-<agent>.log)
+  doctor               diagnostics non destructifs du workspace
+
+--port N              port d'écoute (défaut: premier libre de 23080..=23099)
+--host H              adresse d'écoute (défaut 127.0.0.1)
+--workspace DIR       racine du workspace (.claude/, .mcp.json, bridge/)
+--instance N          numéro d'instance → serveur `swarm-control-N` (défaut: premier libre)
+--resident AGENT,…    rend ces agents résidents au démarrage (répétable)
+--agent AGENT         vise cet agent (mode agent pour `serve`, cible des commandes ;
+                      refusé par un binaire compilé, qui ne sert que son agent)
+--bridge N            mode agent : pont HTTP parlant le dialecte Discord sur le port N
+                      (POST /send, POST /reset, GET /status, GET /health)
+--runner R            claude | hermes | antigravity (si l'agent existe sous plusieurs)
+--model M             modèle imposé au tour (`ask`, `run`)
+--timeout-ms MS       attente maximale d'un tour (défaut 3600000)
+--offline             build : `cargo build --offline` (registre local déjà complet)
+--json                sortie JSON brute au lieu du résumé lisible
+--debug               une ligne par requête MCP, commande lancée (secrets masqués),
+                      session reprise ou oubliée, retente, bail pris ou repris —
+                      idem SWARM_DEBUG=1
+--headless            sans terminal (systemd) ; TUI par défaut dans un terminal
+--help, --version

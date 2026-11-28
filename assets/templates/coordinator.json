@@ -1,0 +1,9 @@
+{
+  "name": "coordinator",
+  "description": "Agent coordinateur de l'essaim : découpe une tâche, la répartit sur les autres agents et agrège leurs résultats.",
+  "class": "coordinator",
+  "promptFile": "coordinator.md",
+  "expectedMcpServers": [],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": false, "unit": false }
+}

@@ -45,6 +45,7 @@ mod config;
 mod debug;
 mod history;
 mod instance;
+mod memory;
 mod owners;
 mod peers;
 mod process;
@@ -61,4 +62,4 @@ mod tools;
 #[cfg(feature = "tui")]
 mod tui;
 
-pub use cli::{run, serve_agent};
+pub use cli::{run, serve_agent, serve_compiled};

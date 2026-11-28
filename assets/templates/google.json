@@ -1,0 +1,9 @@
+{
+  "name": "google",
+  "description": "Agent persistant Google (Gmail & Calendar) : trie les mails, prépare des brouillons et tient l'agenda via le MCP serveur_google ; OAuth par l'environnement, hors binaire.",
+  "class": "google",
+  "promptFile": "google.md",
+  "expectedMcpServers": ["serveur_google"],
+  "requiredVars": ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+  "defaults": { "runner": "claude", "executable": true, "unit": false }
+}

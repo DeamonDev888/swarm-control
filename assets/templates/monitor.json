@@ -1,0 +1,9 @@
+{
+  "name": "monitor",
+  "description": "Agent surveillant de l'essaim : tours planifiés sur journaux, URL et métriques ; alerte un pair quand quelque chose change.",
+  "class": "monitor",
+  "promptFile": "monitor.md",
+  "expectedMcpServers": [],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": false, "unit": false }
+}

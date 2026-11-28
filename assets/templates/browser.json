@@ -1,0 +1,9 @@
+{
+  "name": "browser",
+  "description": "Agent navigateur de l'essaim : ouvre, lit et remplit des pages web via le MCP serveur_navigateur, et rapporte avec ses URL.",
+  "class": "browser",
+  "promptFile": "browser.md",
+  "expectedMcpServers": ["serveur_navigateur"],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": false, "unit": false }
+}

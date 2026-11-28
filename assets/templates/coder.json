@@ -1,0 +1,9 @@
+{
+  "name": "coder",
+  "description": "Agent codeur de l'essaim : écrit et modifie le code du workspace, vérifie avant d'annoncer.",
+  "class": "coder",
+  "promptFile": "coder.md",
+  "expectedMcpServers": [],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": false, "unit": false }
+}

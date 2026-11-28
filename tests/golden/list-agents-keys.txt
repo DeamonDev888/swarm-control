@@ -1,0 +1,1 @@
+list_agents.details: class, hasSession, mcpServers, model, name, promptBytes, runner, running, sessionId

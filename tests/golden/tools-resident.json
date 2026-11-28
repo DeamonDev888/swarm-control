@@ -1,0 +1,257 @@
+[
+  {
+    "description": "Pose une question à cet agent. La demande entre dans sa file : ses tours s'exécutent un par un, sur la même session (il se souvient). `from` / `via` tracent la chaîne d'agents (un cycle est refusé). timeoutMs borne l'attente (défaut 1 h) ; stop interrompt un tour.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "Agent qui demande (traçabilité)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Modèle pour ce tour",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "description": "La demande faite à l'agent",
+          "minLength": 1,
+          "type": "string"
+        },
+        "timeoutMs": {
+          "description": "Attente maximale en ms (défaut 3600000)",
+          "maximum": 3600000,
+          "minimum": 1000,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "via": {
+          "description": "Chaîne des agents déjà traversés",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "prompt"
+      ],
+      "type": "object"
+    },
+    "name": "ask"
+  },
+  {
+    "description": "Les fichiers de configuration de cet agent (prompt, settings, MCP, env…), secrets masqués. Lecture seule.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "config"
+  },
+  {
+    "description": "Les derniers tours de cet agent, lus dans son journal, du plus ancien au plus récent. limit borne la page (défaut 50, max 500) ; before (ms) ne garde que les tours antérieurs, pour remonter page par page.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "before": {
+          "description": "Ne garder que les tours antérieurs à cet horodatage (ms)",
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "Nombre de tours rendus (défaut 50, max 500)",
+          "maximum": 500,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "history"
+  },
+  {
+    "description": "Fin de la sortie brute : celle du tour en cours s'il tourne, sinon celle du dernier tour. tail borne la taille rendue en octets (défaut 8192) ; la coupe garde la fin et ne casse jamais un caractère. live dit si un tour tourne.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "tail": {
+          "description": "Octets rendus, les derniers (défaut 8192, max 65536)",
+          "maximum": 65536,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "logs"
+  },
+  {
+    "description": "Oublie un souvenir par son id (rendu par memory_store ou memory_search). ok vaut false si aucun souvenir ne porte cet id.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Id du souvenir à oublier",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "name": "memory_forget"
+  },
+  {
+    "description": "Cherche dans la mémoire de cet agent par mots-clés (majuscules et accents ignorés), les plus pertinents d'abord : score = termes trouvés (les tags comptent double) + récence. limit borne les résultats (défaut 10, max 100). scope \"swarm\" lit, en lecture seule, la mémoire des autres agents du même workspace.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "Nombre de résultats (défaut 10, max 100)",
+          "maximum": 100,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "query": {
+          "description": "Mots-clés cherchés (casse et accents ignorés)",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "description": "self (défaut) : la mémoire de cet agent ; swarm : lecture seule des autres agents",
+          "enum": [
+            "self",
+            "swarm"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "memory_search"
+  },
+  {
+    "description": "Mémorise un fait pour cet agent (préférence, décision, leçon, lien…) : un texte court, des mots-clés facultatifs. Rend l'id du souvenir, pour memory_forget. Un texte ou un tag contenant une clé ou un jeton est refusé.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "tags": {
+          "description": "Mots-clés, comptent double dans la recherche (max 32)",
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "Le fait à retenir (aucun secret : refusé)",
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "name": "memory_store"
+  },
+  {
+    "description": "Gère la session de cet agent : show (la session reprise), reset (l'oublie — le prochain tour repart à neuf), set (force l'identifiant de session). Un reset demandé pendant un tour est appliqué à la fin de ce tour.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "show | reset | set",
+          "enum": [
+            "show",
+            "reset",
+            "set"
+          ],
+          "type": "string"
+        },
+        "id": {
+          "description": "Identifiant de session (obligatoire pour set)",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "session"
+  },
+  {
+    "description": "État de cet agent : idle / busy, longueur de la file, tour en cours (qui demande, depuis quand), session, dernier tour.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "status"
+  },
+  {
+    "description": "Tue le tour en cours (arbre de processus). clearQueue:true annule aussi les demandes en attente. L'agent reste résident et accepte de nouvelles demandes.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "clearQueue": {
+          "description": "Annuler aussi les demandes en attente",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "stop"
+  }
+]

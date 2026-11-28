@@ -1,0 +1,690 @@
+[
+  {
+    "description": "Contrôle les runs : status (état + PID + session), stream (sortie en direct, since=timestamp), wait (bloque jusqu'à la fin), kill (arrêt de l'arbre de processus), list (tous les runs).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "status",
+            "stream",
+            "wait",
+            "kill",
+            "list"
+          ],
+          "type": "string"
+        },
+        "agentName": {
+          "description": "Agent ciblé",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runId": {
+          "description": "Run ciblé (rendu par run_agent background:true)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sinceTimestamp": {
+          "description": "stream : sortie après ce timestamp (ms)",
+          "maximum": 18446744073709551615,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeoutMs": {
+          "description": "Délai de wait en ms (défaut 900000, max 3600000)",
+          "maximum": 3600000,
+          "minimum": 1000,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "name": "agent_control"
+  },
+  {
+    "description": "Rend un agent RÉSIDENT : il est chargé en mémoire avec son propre serveur MCP (annoncé sous swarm-<agent>), une file de demandes et un fil de travail. Rend son URL ; ses outils sont ask, status, stop. Un seul process héberge un agent à la fois.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Agent à rendre résident",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "agent_start"
+  },
+  {
+    "description": "Arrête un agent résident hébergé par cette instance : tour en cours tué, file vidée (chaque demandeur reçoit une erreur), serveur fermé, annonce retirée. L'agent reste défini sur disque et sa session est conservée.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Agent résident à arrêter",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "agent_stop"
+  },
+  {
+    "description": "Crée un agent persistant. Claude : profil agents/<nom>/.claude (prompt, settings, MCP). Hermes : profil natif (hermes profile create) + SOUL.md. Antigravity : profil agents/<nom>/.antigravity (CLI agy). Le prompt définit sa persona ; avec template, la persona du modèle est utilisée (prompt la remplace) et ses variables requises sont vérifiées — voir list_templates. resident:true le rend aussitôt résident (serveur MCP propre, file de demandes). executable:true copie le binaire courant dans <workspace>/bin/<nom> ; unit:true (Linux) écrit en plus une unit systemd --headless (écrite, non activée).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cloneFrom": {
+          "description": "Hermes : profil existant dont copier config, .env, SOUL, skills (les credentials sont par profil)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "copyEnvFrom": {
+          "description": "Claude : settings.json existant dont copier env + serveurs MCP",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executable": {
+          "description": "Compile un binaire dédié à l'agent (crate généré sous <workspace>/agents/<nom>/build/, puis cargo build --release en arrière-plan) et le pose dans <workspace>/bin/<nom> ; delete_agent le retirera. Sans valeur : défaut du template",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Modèle ou surnom (voir model-aliases.json)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Nom unique [a-zA-Z0-9_-] (Hermes : minuscules uniquement)",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "prompt": {
+          "description": "Prompt système (persona, missions, outils autorisés). Avec template : remplace la persona du modèle",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resident": {
+          "description": "Rendre l'agent résident tout de suite",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template": {
+          "description": "Modèle d'agent à instancier (voir list_templates) : persona, serveurs MCP attendus, variables requises, défauts executable/unit/port de pont. Surchargeable par <workspace>/templates/<nom>.json",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "description": "Écrire en plus une unit systemd --headless dans <workspace>/bridge/units (non activée, jamais /etc ; fichier à copier sur l'hôte Linux). Sans valeur : défaut du template",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "create_agent"
+  },
+  {
+    "description": "Supprime un agent (fichiers, profil Hermes) et sa session sauvegardée. Refusé s'il a un run en cours.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Agent",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "delete_agent"
+  },
+  {
+    "description": "Lit les fichiers de configuration d'un agent (prompt, settings, MCP, env — secrets masqués).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Agent",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "get_agent_configs"
+  },
+  {
+    "description": "Liste les agents (Claude, Hermes et Antigravity) avec leur état de session, leur run en cours, leur classe (logo) et, s'ils sont résidents, l'instance et l'URL qui les héberge. details:true ajoute modèle, MCP, taille du prompt.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "details": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_agents"
+  },
+  {
+    "description": "Liste les modèles d'agents : intégrés (assets/templates/) et surcharges du workspace (<workspace>/templates/) — nom, description, classe, variables requises, serveurs MCP attendus et défauts. `create_agent {template}` les instancie, `doctor --agent X` vérifie leurs prérequis.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_templates"
+  },
+  {
+    "description": "Lance un agent persistant (Claude Code, Hermes ou Antigravity). Avec agentName, la session précédente est reprise automatiquement (autoResume) et la nouvelle est sauvegardée : l'agent garde sa mémoire de conversation d'un appel à l'autre. SANS agentName, l'agent est éphémère : un tour, aucune session gardée. archetype lance un tour éphémère avec la persona d'un modèle (ex. coder) : sans agentName ni sessionId, rien de gardé ; explorer et verifier tournent en lecture seule. verify:true fait relire le résultat par l'archétype verifier (champ verified). background:true rend la main tout de suite avec un runId à suivre via agent_control (verify indisponible). Un agent résident (agent_start) est servi par son hôte, quelle que soit l'instance : la demande entre dans sa file (champ routedTo).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "agentName": {
+          "description": "Agent persistant (créé par create_agent). Sa session est reprise automatiquement. Sans agentName : agent éphémère — un tour, rien de sauvegardé.",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "archetype": {
+          "description": "Persona d'un modèle (ex. coder) pour un tour éphémère, sans état ni agentName",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "autoResume": {
+          "description": "Reprendre la dernière session de l'agent (défaut: true)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "background": {
+          "description": "Ne pas attendre : renvoie un runId",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Modèle (override du modèle de l'agent)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Répertoire de travail du run (défaut: workspace)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "description": "Instruction envoyée à l'agent",
+          "minLength": 1,
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider Hermes (override)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runner": {
+          "description": "claude = Claude Code, hermes = Nous Hermes, antigravity = Antigravity CLI (agy)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": "string"
+        },
+        "sessionId": {
+          "description": "Force la reprise d'une session précise",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verify": {
+          "description": "Fait relire le résultat par l'archétype verifier (champ verified)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "runner",
+        "prompt"
+      ],
+      "type": "object"
+    },
+    "name": "run_agent"
+  },
+  {
+    "description": "Lance jusqu'à 10 agents en parallèle (runners mélangeables). waitAll:false rend la main dès le premier succès ; les autres continuent et restent suivis par agent_control.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "agents": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "agentName": {
+                "description": "Agent persistant (créé par create_agent). Sa session est reprise automatiquement. Sans agentName : agent éphémère — un tour, rien de sauvegardé.",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "autoResume": {
+                "description": "Reprendre la dernière session de l'agent (défaut: true)",
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "config": {
+                "description": "Racine du workspace (défaut: workspace global)",
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "description": "Modèle (override du modèle de l'agent)",
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "description": "Répertoire de travail du run (défaut: workspace)",
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "prompt": {
+                "description": "Instruction envoyée à l'agent",
+                "minLength": 1,
+                "type": "string"
+              },
+              "provider": {
+                "description": "Provider Hermes (override)",
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "runner": {
+                "description": "claude = Claude Code, hermes = Nous Hermes, antigravity = Antigravity CLI (agy)",
+                "enum": [
+                  "claude",
+                  "hermes",
+                  "antigravity"
+                ],
+                "type": "string"
+              },
+              "sessionId": {
+                "description": "Force la reprise d'une session précise",
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "taskId": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "runner",
+              "prompt"
+            ],
+            "type": "object"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "type": "array"
+        },
+        "waitAll": {
+          "description": "Attendre tous les agents (défaut: true)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "agents"
+      ],
+      "type": "object"
+    },
+    "name": "run_agents_parallel"
+  },
+  {
+    "description": "Modifie un agent : model, mcpServers, env (clé→valeur), prompt — ou réécrit un fichier entier (file: prompt.md | settings.json | .mcp.json | skill.md, avec content).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "description": "Racine du workspace (défaut: workspace global)",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content": {
+          "description": "Contenu complet du fichier (avec file)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Variables d'environnement à écrire",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "file": {
+          "enum": [
+            "prompt.md",
+            "settings.json",
+            ".mcp.json",
+            "skill.md"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mcpServers": {
+          "description": "Serveurs MCP (noms de .mcp.json)",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "model": {
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Agent",
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "prompt": {
+          "description": "Nouveau prompt système",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runner": {
+          "description": "Runner (si l'agent existe sur plusieurs runners)",
+          "enum": [
+            "claude",
+            "hermes",
+            "antigravity"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "update_agent_config"
+  }
+]

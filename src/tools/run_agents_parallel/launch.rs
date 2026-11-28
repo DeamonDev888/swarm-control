@@ -4,7 +4,9 @@ use super::Indexed;
 use crate::registry::{Outcome, Status};
 use crate::routing;
 use crate::runners;
-use crate::tools::run_args::{RunArgs, result_json};
+use crate::tools::run_args::{
+    RunArgs, annotate_verified, result_json, run_verifier, with_archetype,
+};
 use litemcp::cancel::CancelToken;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -50,16 +52,35 @@ fn start_one(
     let req = args.request().map_err(|e| e.message)?;
     let (tx, task_id) = (tx.clone(), task_id.to_string());
     if routing::host_of(&req).is_some() {
-        return super::routed::start(index, req, task_id, tx, cancel);
+        // Agent hébergé : pas d'archétype possible (tour éphémère sans agentName),
+        // mais verify s'applique : la relecture reste locale à cette instance.
+        return super::routed::start(
+            index,
+            req,
+            task_id,
+            tx,
+            cancel,
+            args.verify,
+            args.prompt_text().to_string(),
+        );
     }
     let live = runners::prepare(&req).map_err(|r| r.error.unwrap_or_default())?;
+    let archetype = args.archetype.clone();
+    let verify = args.verify;
+    let prompt = args.prompt_text().to_string();
+    let ws = req.workspace.clone();
     let for_thread = Arc::clone(&live);
     std::thread::Builder::new()
         .name(format!("swarm-par-{index}"))
         .spawn(move || {
             let started = Instant::now();
-            let result = runners::execute(&req, &for_thread, cancel.as_ref());
+            let result = with_archetype(archetype.as_deref(), || {
+                runners::execute(&req, &for_thread, cancel.as_ref())
+            });
             let mut json = result_json(&req, &result, started.elapsed());
+            if verify {
+                annotate_verified(&mut json, run_verifier(&ws, &prompt, &result.result));
+            }
             json["taskId"] = Value::from(task_id);
             let _ = tx.send(Finished { index, json, ok: result.error.is_none() });
         })

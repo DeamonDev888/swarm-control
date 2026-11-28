@@ -3,7 +3,7 @@
 use crate::harness::{start, start_sharing};
 use crate::resident::eventually;
 use crate::rpc::{call, last_run, lease_file, ok, session_of, state_file};
-use serde_json::{Value, json};
+use serde_json::json;
 
 /// Attend que le run en arrière-plan de `agent` ait un PID (le CLI est lancé).
 fn wait_for_pid(h: &crate::harness::Harness, agent: &str) {
@@ -90,32 +90,6 @@ fn different_agents_run_in_parallel_across_instances() {
     assert!(state_file(&a.ws, "claude", "bob").is_file());
     assert_eq!(last_run(&a.ws, "claude", "alice")["status"], "running");
     assert_eq!(last_run(&a.ws, "claude", "bob")["status"], "done");
-}
-
-#[test]
-fn legacy_agents_json_is_still_read() {
-    let h = start(&[]);
-    ok(&h, "create_agent", json!({"name": "alice", "prompt": "p"}));
-    // Session créée par l'ancien OverMind : seul `bridge/agents.json` la connaît.
-    let now =
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()
-            as u64;
-    std::fs::create_dir_all(h.ws.join("bridge")).unwrap();
-    std::fs::write(
-        h.ws.join("bridge/agents.json"),
-        json!({"claude:alice": {"id": "legacy-1", "ts": now}}).to_string(),
-    )
-    .unwrap();
-
-    let r =
-        ok(&h, "run_agent", json!({"runner": "claude", "agentName": "alice", "prompt": "salut"}));
-    assert!(r["result"].as_str().unwrap().contains("resumed:legacy-1"), "{r}");
-    // La session est désormais dans l'état de l'agent ; l'ancien fichier n'est pas modifié.
-    assert_eq!(session_of(&h.ws, "claude", "alice").as_deref(), Some("legacy-1"));
-    let legacy: Value =
-        serde_json::from_str(&std::fs::read_to_string(h.ws.join("bridge/agents.json")).unwrap())
-            .unwrap();
-    assert_eq!(legacy["claude:alice"]["id"], "legacy-1");
 }
 
 #[test]

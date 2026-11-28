@@ -1,0 +1,2 @@
+instance: swarm-control-N N.N.N — MCP sur http://N.N.N.N:N/mcp  (workspace: <ws>)
+agent: swarm-alice N.N.N — MCP sur http://N.N.N.N:N/mcp  (agent: alice, runner: claude, workspace: <ws>) · pont HTTP sur http://N.N.N.N:N

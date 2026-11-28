@@ -1,0 +1,19 @@
+[
+  {
+    "case": "unknown tool",
+    "code": -32602,
+    "message": "Unknown tool: nope"
+  },
+  {
+    "case": "invalid arguments",
+    "code": -32602,
+    "issues": [
+      "`arguments.runner`: must be one of claude, hermes, antigravity"
+    ]
+  },
+  {
+    "case": "unknown agent",
+    "code": "INVALID_AGENT",
+    "isError": true
+  }
+]

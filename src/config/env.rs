@@ -3,15 +3,15 @@
 use super::state;
 use std::collections::HashMap;
 
-/// Préfixes des variables propres à l'outil : le nouveau d'abord, l'ancien ensuite.
-const APP_PREFIXES: [&str; 2] = ["SWARM_", "OVERMIND_"];
+/// Préfixe des variables propres à l'outil.
+const APP_PREFIXES: [&str; 1] = ["SWARM_"];
 
 /// Valeur d'une variable (env système, sinon `.env` chargés).
 pub fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().or_else(|| state::dotenv_get(name))
 }
 
-/// Variable propre à l'outil : `SWARM_<clé>`, sinon `OVERMIND_<clé>`.
+/// Variable propre à l'outil : `SWARM_<clé>`.
 pub fn app_var(key: &str) -> Option<String> {
     APP_PREFIXES.iter().find_map(|p| var(&format!("{p}{key}")))
 }

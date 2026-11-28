@@ -6,6 +6,10 @@ use std::path::Path;
 use std::process::ExitCode;
 
 pub fn start(options: Options) -> ExitCode {
+    // Le dialecte du pont (`--bridge-dialect`) est process-wide : posé ici, une fois,
+    // avant la délégation au mode agent (seul consommateur de `open_bridge`). Sans effet
+    // en mode instance, qui n'ouvre pas de pont.
+    residents::request_dialect(options.bridge_dialect.unwrap_or_default());
     if options.agent.is_some() {
         return super::agent::start(options);
     }

@@ -11,8 +11,21 @@ documentation = "https://docs.rs/swarm-control"
 readme = "README.md"
 keywords = ["mcp", "agents", "claude-code", "hermes", "orchestration"]
 categories = ["command-line-utilities", "development-tools"]
-# Hors paquet publié : CI, outillage de release, documentation de travail, médias.
-exclude = [".github", "scripts", "docs", "assets", "install.sh", "install.ps1"]
+# Hors paquet publié : CI, outillage de release, documentation de travail, médias lourds.
+# `assets/templates/` (modèles d'agents) et `assets/classes/*.svg` (logos, icônes) restent dans
+# le paquet : la bibliothèque les embarque par `include_str!` (PLAN §4.1, §4.8).
+exclude = [
+    ".github",
+    "scripts",
+    "docs",
+    "assets/*.png",
+    "assets/*.jpg",
+    "assets/pixel",
+    "assets/classes/*.png",
+    "assets/classes/*.jpg",
+    "install.sh",
+    "install.ps1",
+]
 
 [lib]
 name = "swarm_control"

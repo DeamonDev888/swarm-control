@@ -9,8 +9,9 @@
 //! Un bail est un fichier créé de façon **exclusive** (`create_new`, atomique) portant
 //! `{instance, pid, run_id, ts}` ; son détenteur rafraîchit `ts` toutes les 30 s. Il est
 //! **périmé** si son PID est mort ou si son `ts` a plus de 2 minutes (un PID recyclé ne
-//! bat pas du cœur). La reprise d'un bail périmé est sérialisée par un dossier de garde,
-//! pour que deux repreneurs ne gagnent pas.
+//! bat pas du cœur). La reprise d'un bail périmé est sérialisée par un dossier de garde
+//! qui couvre aussi la création du remplacement : un seul repreneur gagne, l'autre voit
+//! « déjà pris ».
 
 mod acquire;
 mod holder;

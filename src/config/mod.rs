@@ -1,14 +1,17 @@
 //! Configuration globale : workspace, variables d'environnement, chemins.
 //!
-//! Résolution du workspace : `--workspace` → `SWARM_WORKSPACE` (ou l'ancien
-//! `OVERMIND_WORKSPACE`) → dossier contenant `.mcp.json` en remontant →
-//! `~/.swarm-control` (ou `~/.overmind` s'il existe déjà).
+//! Résolution du workspace : `--workspace` → `SWARM_WORKSPACE` → dossier contenant
+//! `.mcp.json` en remontant → `~/.swarm-control`.
 
 mod dotenv;
 mod env;
 mod hermes_home;
 mod interpolate;
 mod paths;
+/// Garde-fou de publication des agents x et google : écrit et testé, **sans appelant**
+/// pour l'instant (le marqueur de tour est à venir, PLAN §5 « Robustesse »).
+#[allow(dead_code)]
+pub(crate) mod publish;
 mod state;
 mod timeouts;
 mod workspace;

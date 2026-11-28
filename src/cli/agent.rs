@@ -1,7 +1,7 @@
 //! Mode agent : ce process ne sert qu'un agent résident.
 //!
 //! Pas de serveur d'administration : seulement le serveur MCP de l'agent (`swarm-<agent>`,
-//! `ask` / `status` / `stop`) et, avec `--bridge N`, le pont HTTP compatible `overmind-bridge`
+//! `ask` / `status` / `stop`) et, avec `--bridge N`, le pont HTTP parlant le dialecte Discord
 //! (`/send`, `/reset`, `/status`, `/health`).
 //!
 //! Une fois l'agent en place :
@@ -99,4 +99,49 @@ fn open_tui(ctx: Arc<Ctx>, debug: bool) -> Result<(), String> {
 #[cfg(not(feature = "tui"))]
 fn open_tui(_ctx: Arc<Ctx>, _debug: bool) -> Result<(), String> {
     Err("binaire compilé sans la feature `tui`".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Options, boot};
+    use crate::cli::exe::agent_name;
+    use std::ffi::OsStr;
+
+    fn options(agent: Option<&str>) -> Options {
+        Options { agent: agent.map(String::from), ..Options::default() }
+    }
+
+    #[test]
+    fn un_nom_resolu_vide_ou_invalide_est_refuse_avant_toute_installation() {
+        // `boot` reçoit le nom déjà résolu (exécutable renommé ou --agent) : un nom absent
+        // (aucune résolution) ou invalide doit être refusé AVANT le bail d'instance.
+        let Err(error) = boot(options(None)) else {
+            panic!("un agent sans nom doit être refusé");
+        };
+        assert!(error.starts_with("agent:"), "{error}");
+        let Err(error) = boot(options(Some("../évasion"))) else {
+            panic!("un nom invalide doit être refusé");
+        };
+        assert!(error.starts_with("agent:"), "{error}");
+    }
+
+    #[test]
+    fn le_mode_agent_refuse_les_residents_combines() {
+        // Un process = un agent : les erreurs de mode se voient avant tout effet de bord.
+        let mut options = options(Some("discord"));
+        options.residents = vec!["autre".into()];
+        let Err(error) = boot(options) else {
+            panic!("--resident doit être refusé en mode agent");
+        };
+        assert!(error.contains("--resident"), "{error}");
+    }
+
+    #[test]
+    fn le_nom_du_binaire_renomme_est_la_source_par_defaut_de_l_agent() {
+        // Contrat amont de `boot` (résolu dans cli::run_with) : un exécutable renommé
+        // (`discord.exe`) désigne l'agent ; `swarm-control` reste l'instance d'admin, et
+        // `--agent`, déjà présent dans Options, garde la priorité sur ce défaut.
+        assert_eq!(agent_name(OsStr::new(r"C:\agents\discord.exe")).as_deref(), Some("discord"));
+        assert_eq!(agent_name(OsStr::new(r"C:\bin\swarm-control.exe")), None);
+    }
 }

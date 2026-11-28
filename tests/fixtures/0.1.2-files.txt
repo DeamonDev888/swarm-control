@@ -1,0 +1,14 @@
+.antigravity\agents\trade.md
+.antigravity\settings_trade.json
+.claude\.mcp.alice.json
+.claude\agents\alice.md
+.claude\settings_alice.json
+bridge\hosts\claude-alice.json
+bridge\hosts\hermes-bob.json
+bridge\state\claude-alice.json
+bridge\state\hermes-bob.json
+hermes-home\profiles\bob\SOUL.md
+hermes-home\profiles\bob\config.yaml
+litemcp-registry\swarm-alice.json
+litemcp-registry\swarm-bob.json
+litemcp-registry\swarm-control-1.json

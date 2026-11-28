@@ -1,0 +1,19 @@
+{
+  "addr": "127.0.0.1:23082",
+  "args": [
+    "C:\\Users\\Deamon\\Desktop\\Backup\\swarm-control-v012-target\\release\\swarm-control.exe",
+    "--port",
+    "0",
+    "--workspace",
+    "C:\\Users\\Deamon\\Desktop\\Backup\\v012-ws\\ws"
+  ],
+  "authRequired": false,
+  "cwd": "C:\\Users\\Deamon\\Desktop\\Backup\\swarm-control",
+  "exe": "C:\\Users\\Deamon\\Desktop\\Backup\\swarm-control-v012-target\\release\\swarm-control.exe",
+  "instance": 4030402311352055963,
+  "name": "swarm-bob",
+  "pid": 28936,
+  "port": 23082,
+  "ts": 1795833772,
+  "version": "0.1.2"
+}

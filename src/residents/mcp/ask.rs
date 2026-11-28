@@ -111,3 +111,136 @@ fn reply(ctx: &Ctx, mut via: Vec<String>, outcome: TurnOutcome) -> ToolResult {
         None => Ok(out),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Args, Ctx, Turn, TurnOutcome, handle, wait_for};
+    use crate::runners::RunResult;
+    use serde_json::json;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::channel;
+    use std::time::Duration;
+
+    /// Un Ctx sur un workspace temporaire unique (pid + nom) : aucun serveur, aucun réseau.
+    fn ctx(agent: &str) -> Arc<Ctx> {
+        let ws = std::env::temp_dir().join(format!("swarm-mcp-ask-{}-{agent}", std::process::id()));
+        Arc::new(Ctx::new(agent, crate::agents::Runner::Claude, ws, "swarm-control-1".into()))
+    }
+
+    /// Récupère le tour que `handle` (dans un autre fil) vient de mettre en file.
+    fn wait_turn(ctx: &Ctx) -> Turn {
+        for _ in 0..400 {
+            if let Some(turn) = ctx.inbox.drain().into_iter().next() {
+                return turn;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("le tour n'est jamais entré dans la file");
+    }
+
+    #[test]
+    fn un_cycle_via_est_refuse_avant_la_file() {
+        let ctx = ctx("carol");
+        let args = Args {
+            prompt: "boucle".into(),
+            from: Some("bob".into()),
+            via: Some(vec!["alice".into(), "carol".into()]),
+            timeout_ms: None,
+            model: None,
+        };
+        let error = handle(&ctx, args).unwrap_err();
+        assert!(error.message.starts_with("CYCLE"), "{error:?}");
+        assert!(error.message.contains("[alice, carol]"), "{error:?}");
+        assert_eq!(ctx.inbox.len(), 0, "rien n'a été mis en file");
+    }
+
+    #[test]
+    fn une_chaine_via_est_traversee_et_rendue_dans_la_reponse() {
+        let ctx = ctx("carol");
+        let worker_ctx = Arc::clone(&ctx);
+        let worker = std::thread::spawn(move || {
+            let args = Args {
+                prompt: "relaye à carol".into(),
+                from: Some("bob".into()),
+                via: Some(vec!["alice".into()]),
+                timeout_ms: Some(3000),
+                model: None,
+            };
+            handle(&worker_ctx, args)
+        });
+        let turn = wait_turn(&ctx);
+        assert_eq!(turn.via, ["alice"], "la chaîne demandée par le pair est conservée");
+        assert_eq!(turn.from.as_deref(), Some("bob"));
+        turn.complete(
+            RunResult {
+                result: "voilà".into(),
+                session_id: Some("s1".into()),
+                ..Default::default()
+            },
+            12,
+            34,
+        );
+        let reply = worker.join().unwrap().expect("demande aboutie");
+        assert_eq!(reply["agent"], json!("carol"));
+        assert_eq!(reply["reply"], json!("voilà"));
+        assert_eq!(reply["sessionId"], json!("s1"));
+        assert_eq!(reply["via"], json!(["alice", "carol"]), "l'agent s'ajoute en fin de chaîne");
+        assert_eq!(reply["queuedMs"], json!(12));
+        assert_eq!(reply["durationMs"], json!(34));
+    }
+
+    #[test]
+    fn une_reponse_en_erreur_resort_en_upstream_avec_le_detail() {
+        let ctx = ctx("carol");
+        let worker_ctx = Arc::clone(&ctx);
+        let worker = std::thread::spawn(move || {
+            let args = Args {
+                prompt: "boum".into(),
+                from: None,
+                via: None,
+                timeout_ms: Some(3000),
+                model: None,
+            };
+            handle(&worker_ctx, args)
+        });
+        let turn = wait_turn(&ctx);
+        turn.complete(RunResult::err("boum"), 0, 5);
+        let error = worker.join().unwrap().unwrap_err();
+        assert!(error.message.contains("boum"), "{error:?}");
+        assert!(error.message.contains("carol"), "le détail JSON nomme l'agent : {error:?}");
+    }
+
+    #[test]
+    fn au_dela_du_delai_le_tour_est_annule_et_l_appel_rejete() {
+        let ctx = ctx("dave");
+        let worker_ctx = Arc::clone(&ctx);
+        let worker = std::thread::spawn(move || {
+            let args = Args {
+                prompt: "personne ne répond".into(),
+                from: None,
+                via: None,
+                timeout_ms: Some(30),
+                model: None,
+            };
+            handle(&worker_ctx, args)
+        });
+        let turn = wait_turn(&ctx);
+        let cancelled = Arc::clone(&turn.cancelled);
+        let error = worker.join().unwrap().unwrap_err();
+        assert!(error.message.contains("pas de réponse après 30 ms"), "{error:?}");
+        assert!(cancelled.load(Ordering::SeqCst), "le jeton du tour a été levé à l'abandon");
+    }
+
+    #[test]
+    fn un_agent_arrete_avant_de_repondre_est_une_erreur_interne() {
+        let (sender, receiver) = channel::<TurnOutcome>();
+        drop(sender);
+        let cancelled = AtomicBool::new(false);
+        let Err(error) = wait_for(&receiver, Duration::from_secs(3600), &cancelled) else {
+            panic!("attendu : erreur d'agent arrêté");
+        };
+        assert!(error.message.contains("s'est arrêté avant de répondre"), "{error:?}");
+        assert!(!cancelled.load(Ordering::SeqCst), "rien à annuler : le tour n'existe plus");
+    }
+}

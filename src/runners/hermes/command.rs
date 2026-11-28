@@ -13,7 +13,6 @@ pub fn build(req: &RunRequest, args: &[String]) -> Command {
     let agent = req.agent.as_deref().unwrap_or("");
     cmd.env("HERMES_HOME", config::native_hermes_home())
         .env("SWARM_AGENT_NAME", agent)
-        .env("OVERMIND_AGENT_NAME", agent)
         .env("PYTHONIOENCODING", "utf-8")
         .env("PYTHONUNBUFFERED", "1")
         .env("TERM", "emacs")

@@ -1,0 +1,16 @@
+{
+  "agent": "bob",
+  "lastRun": {
+    "exitCode": null,
+    "lastOutputAt": 1795833773894,
+    "pid": 25000,
+    "runId": "run-1795833773777-8",
+    "status": "done",
+    "ts": 1795833773783
+  },
+  "runner": "hermes",
+  "session": {
+    "id": "sess-22776-19",
+    "ts": 1795833773885
+  }
+}

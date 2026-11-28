@@ -47,7 +47,7 @@ fn command(req: &RunRequest, plan: &Plan) -> Command {
     }
     cmd.env("SWARM_RUNNER", "antigravity");
     if let Some(name) = &req.agent {
-        cmd.env("SWARM_AGENT_NAME", name).env("OVERMIND_AGENT_NAME", name);
+        cmd.env("SWARM_AGENT_NAME", name);
     }
     cmd
 }

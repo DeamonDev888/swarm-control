@@ -1,0 +1,9 @@
+{
+  "agent": "alice",
+  "instance": "swarm-control-1",
+  "pid": 28936,
+  "run_id": "host-28936-0",
+  "runner": "claude",
+  "ts": 1795833773632,
+  "url": "http://127.0.0.1:23081/mcp"
+}

@@ -7,8 +7,10 @@
 //!   exécute les tours l'un après l'autre : une session n'est jamais reprise deux fois ;
 //! - un **bail d'hébergement** (`owners`) : un seul process héberge un agent.
 //!
-//! En option (mode agent), un **pont HTTP** (`bridge/`) compatible avec l'`overmind-bridge`
-//! Node (`/send`, `/reset`, `/status`, `/health`) met ses demandes dans la même file.
+//! En option (mode agent), un **pont HTTP** (`bridge/`) met ses demandes dans la même
+//! file, dans un dialecte choisi (`--bridge-dialect` : `discord` par défaut, `whatsapp`,
+//! `raw`) ; `/send` peut répondre `202 {turnId}` (envoi asynchrone), l'issue étant lisible
+//! par `GET /turn/<turnId>`, et la file est plafonnée (`429`).
 //!
 //! Rien d'autre n'est gardé en RAM : la conversation reste dans la session du CLI
 //! (`--resume`), relancé une fois par tour.
@@ -22,6 +24,7 @@ mod inbox;
 mod info;
 mod mcp;
 mod reset;
+mod schedule;
 mod server;
 mod start;
 mod status;
@@ -31,7 +34,9 @@ pub(crate) mod turn;
 mod waiting;
 mod worker;
 
+pub use bridge::Dialect;
 pub use bridge::open as open_bridge;
+pub(crate) use bridge::request_dialect;
 pub use ctx::Ctx;
 pub use start::{start, start_on};
 pub use stop::stop;

@@ -1,0 +1,9 @@
+{
+  "name": "explorer",
+  "description": "Agent explorateur de l'essaim : cherche et résume code, web et documentation, en lecture seule, avec ses sources.",
+  "class": "explorer",
+  "promptFile": "explorer.md",
+  "expectedMcpServers": [],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": false, "unit": false }
+}

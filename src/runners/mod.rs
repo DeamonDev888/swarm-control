@@ -10,6 +10,7 @@ mod antigravity;
 mod claude;
 mod end;
 mod execute;
+mod generic;
 mod guard;
 mod hermes;
 mod prepare;

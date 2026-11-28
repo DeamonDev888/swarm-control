@@ -1,0 +1,9 @@
+{
+  "name": "custom",
+  "description": "Agent persistant générique : répond aux envois du pont HTTP en dialecte raw (Telegram, Slack, Matrix, webhook…) et aux tours planifiés.",
+  "class": "custom",
+  "promptFile": "custom.md",
+  "expectedMcpServers": [],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": true, "unit": false, "bridgePort": 3013 }
+}

@@ -1,0 +1,16 @@
+{
+  "agent": "alice",
+  "lastRun": {
+    "exitCode": null,
+    "lastOutputAt": 1795833773630,
+    "pid": 6244,
+    "runId": "run-1795833773502-6",
+    "status": "done",
+    "ts": 1795833773519
+  },
+  "runner": "claude",
+  "session": {
+    "id": "sess-16276-14",
+    "ts": 1795833773622
+  }
+}

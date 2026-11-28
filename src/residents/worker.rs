@@ -1,8 +1,11 @@
 //! Le fil de travail d'un agent résident : un tour à la fois, dans l'ordre d'arrivée.
+//!
+//! Au démarrage, il lance aussi le planificateur des tâches planifiées (`schedule.rs`)
+//! lues dans la définition de l'agent : leurs tours arrivent dans la même file.
 
 use super::ctx::Ctx;
 use super::turn::Turn;
-use super::waiting;
+use super::{schedule, waiting};
 use crate::history;
 use crate::owners::Lease;
 use crate::runners::{self, RunResult};
@@ -15,6 +18,10 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 
 /// Boucle du fil de travail. Détient le bail d'hébergement : il est libéré à la sortie.
 pub fn run(ctx: Arc<Ctx>, lease: Lease) {
+    // Tâche planifiée (PLAN §4.4) : un fil à part qui dépose ses tours dans la même file.
+    // Il sonde `stopping` pendant chaque attente ; sa fin est attendue avant de rendre le
+    // bail, pour qu'aucun tour ne soit déposé après l'arrêt.
+    let scheduler = start_scheduler(&ctx);
     while !ctx.stopping() {
         if let Some(turn) = ctx.inbox.pop(HEARTBEAT) {
             run_turn(&ctx, turn);
@@ -23,6 +30,22 @@ pub fn run(ctx: Arc<Ctx>, lease: Lease) {
     }
     // Les demandes arrivées pendant l'arrêt reçoivent une erreur, jamais le silence.
     ctx.clear_queue("STOPPED: l'agent a été arrêté.");
+    if let Some(handle) = scheduler {
+        let _ = handle.join();
+    }
+}
+
+/// Lance le planificateur si la définition de l'agent porte un `schedule` ; `None` sinon
+/// (ou schedule illisible : signalé au journal de diagnostic, l'agent démarre quand même).
+fn start_scheduler(ctx: &Arc<Ctx>) -> Option<std::thread::JoinHandle<()>> {
+    let task = schedule::from_definition(&ctx.workspace, ctx.runner, &ctx.agent)?;
+    match schedule::spawn(Arc::clone(ctx), task) {
+        Ok(handle) => Some(handle),
+        Err(e) => {
+            crate::debug!("résidence {} : planificateur non démarré · {e}", ctx.agent);
+            None
+        }
+    }
 }
 
 fn run_turn(ctx: &Ctx, turn: Turn) {
@@ -124,6 +147,31 @@ mod tests {
 
         let done = outcome.recv().expect("l'appelant est notifié");
         assert!(done.result.error.as_deref().unwrap().starts_with("CANCELLED"));
+        let _ = std::fs::remove_dir_all(&ctx.workspace);
+    }
+
+    /// Un `schedule` dans la définition lance le planificateur au démarrage du fil de
+    /// travail : son tour arrive dans la même file, marqué `from: "schedule"` ; sans
+    /// `schedule`, rien n'est lancé.
+    #[test]
+    fn un_schedule_de_la_definition_lance_le_planificateur() {
+        let ctx = ctx("planifie");
+        assert!(start_scheduler(&ctx).is_none(), "sans définition : rien");
+        let path = crate::agents::claude_settings_path(&ctx.workspace, "alice");
+        crate::store::write_json_atomic(&path, &serde_json::json!({ "schedule": "1s résume" }))
+            .unwrap();
+        let scheduler = start_scheduler(&ctx).expect("planificateur lancé");
+        let turn = ctx.inbox.pop(Duration::from_secs(5)).expect("tour planifié déposé");
+        assert_eq!((turn.from.as_deref(), turn.prompt.as_str()), (Some("schedule"), "résume"));
+        let queued = turn.queued_ms();
+        turn.complete(RunResult::default(), queued, 0);
+        ctx.stopping.store(true, Ordering::SeqCst);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !scheduler.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(scheduler.is_finished(), "le planificateur s'arrête avec l'agent");
+        scheduler.join().unwrap();
         let _ = std::fs::remove_dir_all(&ctx.workspace);
     }
 

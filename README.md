@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="880" />
+<img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/hornet-pixel-banner.svg" alt="swarm-control — Agents IA persistants, orchestrés par MCP natif" width="760" />
 
 <br />
 
@@ -9,13 +9,13 @@
 [![docs.rs](https://img.shields.io/docsrs/swarm-control?color=22D3EE)](https://docs.rs/swarm-control)
 [![LiteMCP](https://img.shields.io/crates/v/litemcp.svg?label=LiteMCP&color=8B5CF6)](https://github.com/DeamonDev888/litemcp)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-F97316.svg?logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Binaire](https://img.shields.io/badge/binaire-~2%20Mio-06B6D4.svg)](#léger-mesuré)
+[![Binaire](https://img.shields.io/badge/binaire-~3%20Mio-06B6D4.svg)](#léger-mesuré)
 [![Licence](https://img.shields.io/badge/licence-MIT%20%2F%20Apache--2.0-64748B.svg)](LICENSE-MIT)
 
 <br />
 
 **Des agents IA qui se souviennent, tournent en continu et se parlent entre eux.**
-Un seul exécutable de 2 Mio, rien d'autre à installer — propulsé par [LiteMCP](https://github.com/DeamonDev888/litemcp).
+Un seul exécutable d'environ 3 Mio, rien d'autre à installer — propulsé par [LiteMCP](https://github.com/DeamonDev888/litemcp).
 
 [Installer](#1-installer) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-10-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
 
@@ -23,43 +23,12 @@ Un seul exécutable de 2 Mio, rien d'autre à installer — propulsé par [LiteM
 
 ---
 
-## C'est quoi ?
-
-Quand vous lancez `claude -p "…"` ou `hermes chat`, l'IA **oublie tout** dès que la commande se termine.
-`swarm-control` transforme ces outils en **agents** :
-
-| | Sans swarm-control | Avec swarm-control |
-|---|---|---|
-| Mémoire | perdue à chaque appel | l'agent **reprend sa conversation** à chaque fois |
-| Plusieurs IA | à lancer à la main, une par une | jusqu'à **10 agents en parallèle**, suivis et arrêtables |
-| Toujours en ligne | non | un agent peut rester **résident 24/7** (Discord, WhatsApp, X, Google…) |
-| Piloter depuis une IA | non | Claude Code peut **créer et commander** d'autres agents |
-
-Il fonctionne avec les outils d'IA en ligne de commande que vous avez déjà :
-**Claude Code** (`claude`), **Hermes** (`hermes`) et **Antigravity** (`agy`). D'autres arrivent (opencode, Kilo, Cline, OpenClaw…).
+Runners pris en charge : **Claude Code** (`claude`), **Hermes** (`hermes`) et **Antigravity** (`agy`).
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-live-strip.svg" alt="swarm-control — plusieurs agents qui travaillent en parallèle" width="880" />
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-live-strip.svg" alt="swarm-control — agents de l'essaim : coordinator, coder, explorer, browser, monitor, verifier" width="740" />
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — agents persistants Discord, WhatsApp, X, Google, Trading et Custom" width="740" />
 </div>
-
-### Agents persistants uniquement (Discord, WhatsApp, X, Google & Custom)
-
-Conçus pour tourner en **agents résidents durables** (`1 profil = 1 exécutable`, session conservée 24/7 d'un message à l'autre) : au-delà des connecteurs **Discord** (`--bridge` HTTP & MCP), **WhatsApp**, **X** et **Google (Gmail & Calendar)**, **les agents customisables n'attendent que des bridges CLI et des serveurs MCP à être connectés** (Telegram, Slack, Matrix, webhooks, outils internes…) pour habiter n'importe quel canal.
-
-<div align="center">
-  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — Agents persistants Discord, WhatsApp, X, Google et Custom" width="880" />
-</div>
-
-### Les mots à connaître
-
-| Mot | En clair |
-|---|---|
-| **Agent** | Une IA avec un nom (`architecte`, `sniper`…), une personnalité (son *prompt*) et une mémoire. |
-| **Runner** | Le programme d'IA qui fait réellement le travail : `claude`, `hermes` ou `agy`. |
-| **Session** | La conversation de l'agent, sauvegardée sur disque et reprise à chaque appel. |
-| **Agent résident** | Un agent qui reste allumé et répond aux demandes au fil de l'eau, comme un bot. |
-| **MCP** | Le protocole standard qui permet à une IA (Claude Code, Cursor…) d'utiliser des outils. `swarm-control` est un serveur MCP, construit sur [LiteMCP](https://github.com/DeamonDev888/litemcp). |
-| **Workspace** | Le dossier où tout est rangé (agents, sessions, journaux). Par défaut : `~/.swarm-control`. |
 
 ---
 
@@ -182,22 +151,22 @@ Lancé ainsi, il ne sert que cet agent.
 
 ```bash
 # Windows
-copy swarm-control.exe sniper.exe
+copy swarm-control.exe discord.exe
 # Linux / macOS
-cp swarm-control sniper
+cp swarm-control discord
 ```
 
 Ensuite :
 
 ```bash
-sniper                         # ouvre une interface terminal pour discuter avec l'agent
-sniper ask "état du marché ?"  # pose une question et affiche la réponse
-sniper status                  # occupé ? libre ? combien de demandes en attente ?
-sniper history                 # ses derniers échanges
-sniper reset                   # oublie la conversation : repart à zéro
+discord                          # ouvre une interface terminal pour discuter avec l'agent
+discord ask "résume le salon"    # pose une question et affiche la réponse
+discord status                   # occupé ? libre ? combien de demandes en attente ?
+discord history                  # ses derniers échanges
+discord reset                    # oublie la conversation : repart à zéro
 ```
 
-> Pas envie de renommer ? `swarm-control --agent sniper` fait exactement la même chose.
+> Pas envie de renommer ? `swarm-control --agent discord` fait exactement la même chose.
 > Depuis Claude Code, `create_agent(…, executable:true)` crée cette copie pour vous dans `<workspace>/bin/`.
 
 ### L'interface terminal
@@ -216,16 +185,12 @@ Les raccourcis à une lettre ne marchent que quand le champ de message est vide.
 
 ### Agent permanent (serveur, bot Discord…)
 
-<div align="center">
-  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — agents persistants Discord, WhatsApp, X, Google et personnalisés" width="880" />
-</div>
-
 ```bash
-sniper --headless --bridge 3001
+discord --headless --bridge 3011
 ```
 
 - `--headless` : pas d'interface, l'agent attend les demandes (idéal en service ou sur un VPS).
-- `--bridge 3001` : ouvre un petit pont HTTP pour un bot externe (compatible avec le worker Discord `overmind-bridge`) :
+- `--bridge 3011` : ouvre un petit pont HTTP pour un bot externe, par exemple un routeur Discord (un routeur existant qui poste déjà `/send`, comme l'ancien `overmind-bridge`, n'a qu'à changer de port) :
 
 | Route | Rôle |
 |---|---|
@@ -321,9 +286,17 @@ Tout est optionnel. Les variables peuvent aussi être mises dans un fichier `.en
 | `SWARM_CLAUDE_PERMISSIONS` | permissions passées à Claude (défaut `--dangerously-skip-permissions`) |
 | `CLAUDE_BIN`, `HERMES_BIN`, `AGY_BIN` | chemin des runners s'ils ne sont pas dans le `PATH` |
 | `HERMES_HOME` | dossier des profils Hermes |
+| `SWARM_EXTERNAL_ENV_PATH` | fichier `.env` externe lu en plus de ceux du workspace |
+| `SWARM_HISTORY_MAX` | taille du journal d'un agent avant rotation, en octets (sinon défaut interne, 5 Mio) |
+| `SWARM_ALLOW_PUBLISH=1` | lève le garde-fou de publication des agents `x` et `google` ; absente = brouillon seulement |
+| `SWARM_ANTIGRAVITY_PERMISSIONS` | permissions passées au runner Antigravity (défaut `--dangerously-skip-permissions`) |
+| `SWARM_AGENT_PORT` | port imposé au serveur d'un agent résident (`0` = port éphémère ; sert surtout au harnais de tests) |
+| `SWARM_SKIP_AGENT_BUILD=1` | saute la compilation du binaire dédié d'un agent (tests, CI sans Rust) |
+| `SWARM_AGENT_NAME`, `SWARM_RUNNER` | posées par swarm-control pour le processus du runner (internes, à ne pas régler) |
 
 Alias de modèles : `<workspace>/model-aliases.json` → `{"rapide": "claude-haiku-5-5"}`.
-Les anciennes variables `OVERMIND_*` restent lues.
+
+> **OverMind n'est plus supporté** : utilisez uniquement les variables `SWARM_*` ci-dessus et un workspace swarm-control.
 
 ### Sécurité — à lire
 
@@ -399,8 +372,6 @@ Toujours bloqué ? `swarm-control --debug …` affiche tout ce qui se passe, et 
 3. **Un seul run à la fois par agent**, même entre plusieurs serveurs : un bail sur disque (`bridge/owners/`) l'empêche de répondre deux fois en parallèle (`AGENT_BUSY`).
 4. **Secours** : jetons de repli Claude sur 401 / 429 / 5xx.
 5. **Historique** : chaque tour est journalisé dans `bridge/history/` (fichiers JSONL tournants).
-
-Les agents créés avec l'ancien OverMind TS (`.claude/`, profils Hermes, `bridge/agents.json`) fonctionnent tels quels.
 </details>
 
 <details>
@@ -413,7 +384,7 @@ swarm-control = { version = "0.1", default-features = false }   # sans l'interfa
 
 ```rust
 fn main() -> std::process::ExitCode {
-    swarm_control::serve_agent("sniper")   // un binaire dédié à l'agent « sniper »
+    swarm_control::serve_agent("discord")   // un binaire dédié à l'agent « discord »
 }
 ```
 
@@ -426,7 +397,7 @@ Build `--release`, Windows 11, mémoire = *working set* du process :
 
 | | |
 |---|---|
-| Binaire | **≈ 2 Mio** |
+| Binaire | **≈ 3 Mio** avec l'interface terminal, **≈ 2,7 Mio** sans |
 | Mémoire au repos | **≈ 7 Mio**, 5 threads |
 | 24 agents résidents au repos | **≈ 7 Mio** au total : **≈ 80 Kio et 2 threads par agent** |
 | Dépendances directes | [`litemcp`](https://crates.io/crates/litemcp), `serde`, `serde_json` (+ `ratatui` pour l'interface) — aucun runtime async |
@@ -436,16 +407,6 @@ Build `--release`, Windows 11, mémoire = *working set* du process :
 Le serveur MCP, la validation des arguments (JSON Schema) et l'annonce des agents résidents viennent de
 [**LiteMCP**](https://github.com/DeamonDev888/litemcp) ([crates.io](https://crates.io/crates/litemcp) · [docs.rs](https://docs.rs/litemcp)),
 une bibliothèque Rust MCP légère et synchrone (Streamable HTTP, spec `2026-07-28`). Sa latence est mesurée dans son dépôt.
-
-## Feuille de route
-
-Déjà là : Claude Code, Hermes et Antigravity · sessions persistantes · agents résidents · un exécutable par agent ·
-pont HTTP · CLI complète et interface terminal · historique · découverte des pairs · jeton d'authentification.
-
-À venir :
-
-- **Pairs injectés automatiquement** : chaque agent verra les autres agents résidents comme des outils, sans configuration.
-- **Plus de runners** : opencode, Kilo, Cline, OpenClaw, grokbot, puis n'importe quel CLI décrit sans recompiler.
 
 ## Contribuer
 
@@ -462,5 +423,5 @@ MIT ou Apache-2.0, au choix.
 
 <div align="center">
   <br />
-  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/v0.1.2/assets/pixel/hornet-pixel-logo.svg" alt="Logo swarm-control : un frelon cybernétique animé" width="128" />
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/hornet-pixel-logo.svg" alt="Logo swarm-control : un frelon cybernétique animé" width="128" />
 </div>

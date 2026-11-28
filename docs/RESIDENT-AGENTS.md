@@ -69,7 +69,8 @@ struct AgentHost {            // une entrée par agent résident, dans l'instanc
 3. **État par agent, plus de fichier global partagé** *(✅ construit — étape 1)* : `agents.json` et `process-registry.json`
    sont relus et réécrits en entier ; nos verrous (`static Mutex`) ne protègent qu'un process. On
    passe à `<ws>/bridge/state/<runner>-<agent>.json` (session + dernier run), écrit seulement par
-   le propriétaire. Les anciens fichiers restent lus (compatibilité OverMind TS).
+   le propriétaire. Les anciens fichiers sont encore lus en repli : héritage d'OverMind, qui n'est
+   plus supporté — ce repli sera retiré en 0.2.0.
 4. **Routage** *(✅ construit)* : `run_agent("alice")` (et chaque tâche de `run_agents_parallel`)
    d'un agent qui a un hôte vivant est **transmis** à cet hôte par `ask` (un `POST /mcp` en `std`,
    module `peers`), même si l'hôte est l'instance qui reçoit l'appel : la file reste l'unique voie.
@@ -91,26 +92,26 @@ est refusé (un agent par process) ; `--port N` fixe le port d'écoute (défaut 
 Trois façons équivalentes de l'obtenir :
 
 ```bash
-cp swarm-control sniper && ./sniper --port 23090 --bridge 3001 --workspace ~/.swarm-control
-swarm-control --agent sniper --port 23090 --bridge 3001 --workspace ~/.swarm-control  # sans renommer (unit systemd)
+cp swarm-control discord && ./discord --port 23090 --bridge 3011 --workspace ~/.swarm-control
+swarm-control --agent discord --port 23090 --bridge 3011 --workspace ~/.swarm-control  # sans renommer (unit systemd)
 ```
 
 ```rust
 // depuis un crate qui dépend de swarm-control (`fn main() -> ExitCode`) :
-swarm_control::serve_agent("sniper")
+swarm_control::serve_agent("discord")
 ```
 
 `--agent` garde la priorité sur le nom du fichier. La bannière reprend celle d'une instance,
 avec le pont en plus :
 
 ```text
-swarm-sniper 0.2.0 — MCP sur http://127.0.0.1:23090/mcp  (agent: sniper, runner: hermes, workspace: …) · pont HTTP sur http://127.0.0.1:3001
+swarm-discord 0.1.x — MCP sur http://127.0.0.1:23090/mcp  (agent: discord, runner: hermes, workspace: …) · pont HTTP sur http://127.0.0.1:3011
 ```
 
 ### Le pont HTTP `--bridge N`
 
-Compatible avec l'`overmind-bridge` Node (worker Discord d'un agent) : un routeur existant n'a
-qu'à changer de port. HTTP/1.1 minimal en `std`, une requête par connexion, 64 connexions
+Il parle le **dialecte Discord** : un routeur Discord existant qui poste déjà `/send` (par exemple
+l'ancien `overmind-bridge`, OverMind n'étant plus supporté) n'a qu'à changer de port. HTTP/1.1 minimal en `std`, une requête par connexion, 64 connexions
 servies en même temps (au-delà : `503`).
 
 | Route | Requête → réponse |

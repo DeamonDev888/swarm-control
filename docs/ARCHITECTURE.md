@@ -23,7 +23,7 @@ Un module ne dépend que des couches **au-dessus** de lui dans ce tableau (plus 
 | 9 | `agents` | créer / lister / modifier / supprimer un agent | `claude/`, `hermes/`, `list/`, `lookup.rs`, `paths.rs`, `secrets.rs` |
 | 10 | `runners` | cycle d'un run : reprise de session, lancement, retente, garde anti-panique | `execute.rs`, `prepare.rs`, `guard.rs`, `claude/`, `hermes/` |
 | 10b | `peers` | client MCP minimal (std) vers un autre serveur LiteMCP | `call.rs`, `http.rs`, `url.rs` |
-| 11 | `residents` | **agents résidents** : serveur MCP propre, file, fil de travail, hébergement | `start.rs`, `stop.rs`, `host.rs`, `ctx.rs`, `inbox.rs`, `worker.rs`, `waiting.rs`, `server.rs`, `reset.rs`, `mcp/`, `bridge/` (pont HTTP compatible overmind-bridge) |
+| 11 | `residents` | **agents résidents** : serveur MCP propre, file, fil de travail, hébergement | `start.rs`, `stop.rs`, `host.rs`, `ctx.rs`, `inbox.rs`, `worker.rs`, `waiting.rs`, `server.rs`, `reset.rs`, `mcp/`, `bridge/` (pont HTTP, dialecte Discord) |
 | 11b | `routing` | un run d'agent hébergé est transmis à son hôte (`ask`) | `eligible.rs`, `forward.rs` |
 | 11c | `instance` | numéro d'instance `swarm-control-N` (bail + battement) | `claim.rs` |
 | 12 | `tools` | les 10 outils MCP de l'instance (schéma + handler) | un fichier ou dossier par outil |
@@ -73,8 +73,8 @@ Chaque agent résident = 2 fils (serveur, travail) + sa file. Le bail d'**héber
 
 Un fichier par agent : deux agents ne se réécrivent jamais l'un l'autre, même dans des
 instances différentes. Pour un même agent, un seul process écrit à la fois (celui qui
-détient son bail). Les fichiers de l'agent Claude / Hermes eux-mêmes restent ceux de
-l'OverMind TS.
+détient son bail). Les fichiers de l'agent Claude / Hermes eux-mêmes sont ceux que leurs CLI
+attendent (`.claude/`, profils Hermes).
 
 | Fichier | Rôle |
 |---|---|
@@ -86,7 +86,7 @@ l'OverMind TS.
 | `%TEMP%/swarm-control-instances/<N>.json` | **bail de numéro d'instance** (`swarm-control-N`) |
 | `%TEMP%/litemcp-registry/swarm-control-<N>.json` | annonce LiteMCP du serveur d'administration de l'instance |
 | `%TEMP%/litemcp-registry/swarm-<agent>.json` | annonce LiteMCP du serveur de l'agent résident (port, PID, instance) |
-| `<ws>/bridge/agents.json` | ancien fichier de sessions de l'OverMind TS : **lu** en repli, jamais écrit |
+| `<ws>/bridge/agents.json` | ancien fichier de sessions hérité d'OverMind (plus supporté) : **lu** en repli, jamais écrit — retiré en 0.2.0 |
 | `<hermes>/profiles/<n>/` | profil Hermes (géré par le CLI `hermes`) |
 | `<ws>/model-aliases.json` | surnoms de modèles (optionnel) |
 

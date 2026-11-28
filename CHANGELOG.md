@@ -7,6 +7,45 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ## [Unreleased]
 
+### Ajouté
+
+- **Modèles d'agents** intégrés (`assets/templates/`) : `create_agent {template}` pour les 11
+  agents du README, `swarm-control templates` en CLI, `list_templates` en MCP ; champ `class`
+  publié par `status`, `list_agents` et `/status` du pont (le logo ne se devine plus sur le nom).
+- **Mémoire native** par agent, sans base de données : outils MCP `memory_store` /
+  `memory_search` / `memory_forget`, CLI `<agent> memory`, filtrage des jetons à l'écriture.
+- **Archétypes de l'essaim** : `run_agent {archetype}` (persona prête à l'emploi), permissions
+  restreintes pour `explorer` et `verifier`.
+- **Dialectes du pont** : `--bridge-dialect discord|whatsapp|raw` ; `POST /send {async:true}` →
+  `202 {turnId}` puis `GET /turn/<id>`.
+- **Tâches planifiées** : `schedule` dans la définition d'un résident (même file que les
+  demandes, `from: "schedule"`, pas de rafale après une veille) ; les drapeaux `--every` /
+  `--window` sont parsés mais pas encore branchés.
+- **Compilation native des agents persistants** : `swarm-control build <agent>`, entrée de lib
+  `serve_compiled`, crate généré sans secret ; sans `cargo`, l'agent est créé et l'erreur le dit.
+- **Anti-régression** : contrats publics figés dans `tests/golden/` (outils, aide, bannière,
+  clés, erreurs MCP, variables d'environnement), fichiers témoins de la 0.1.2 dans
+  `tests/fixtures/`, garde-fou de publication écrit (`SWARM_ALLOW_PUBLISH`, agents x / google —
+  branchement du marqueur de tour à venir).
+
+### Modifié
+
+- ⚠ **Rupture** : un binaire `swarm-control` renommé sous un nom d'agent n'est plus servi ni
+  démarré (code 2, message de migration) ; `--agent NAME` reste disponible pour le développement.
+
+### Retiré
+
+- ⚠ **Rupture** : compatibilité OverMind supprimée (variables `OVERMIND_*`, `~/.overmind`,
+  `bridge/agents.json`) ; le dialecte « overmind-bridge » s'appelle dialecte Discord.
+
+### Corrigé
+
+- Test instable `resident_hosting::agent_stop_closes_the_server_and_frees_everything` (condition
+  « le serveur ne sert plus cet agent » au lieu de « port fermé »).
+- Import `std::time` confiné sous Windows (`owners/tests.rs`) ; `paste` (RUSTSEC-2024-0436,
+  transitif de `ratatui`) ignoré dans `deny.toml` ; README ré-encodé ; lints clippy réglés
+  (`cargo clippy -D warnings` vert).
+
 ## [0.1.2] - 2026-11-27
 
 ### Ajouté

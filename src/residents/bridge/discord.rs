@@ -1,6 +1,6 @@
-//! Le dialecte Discord de l'`overmind-bridge` : contexte du message et nettoyage de la réponse.
+//! Le dialecte Discord : contexte du message et nettoyage de la réponse.
 
-/// Prompt envoyé à l'agent, au format de `formatDiscordContext` (OverMind) : les SOUL.md
+/// Prompt envoyé à l'agent, au format de `formatDiscordContext` : les SOUL.md
 /// existantes lisent `CHANNEL_ID` dans ce bloc pour savoir où répondre.
 pub fn context(
     message: &str,
@@ -92,7 +92,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn context_matches_the_overmind_format() {
+    fn context_matches_the_discord_dialect() {
         let prompt = context("analyse AAPL", Some("1442317829998383235"), Some("bob"), Some("42"));
         assert_eq!(
             prompt,

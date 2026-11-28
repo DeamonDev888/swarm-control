@@ -50,12 +50,6 @@ fn control(h: &Harness, args: &[&str]) -> (i32, String, String) {
     cli(h, Path::new(env!("CARGO_BIN_EXE_swarm-control")), args)
 }
 
-/// Sous-commande du binaire renommé d'après l'agent : copié **une seule fois** par test
-/// (recopier par-dessus un exécutable en cours d'exécution est refusé par Windows).
-fn named(h: &Harness, agent: &str) -> PathBuf {
-    agent_exe(h, agent)
-}
-
 fn json_out(out: &str) -> Value {
     serde_json::from_str(out).unwrap_or_else(|e| panic!("JSON attendu ({e}): {out}"))
 }
@@ -69,19 +63,22 @@ fn lease_exists(h: &Harness, runner: &str, agent: &str) -> bool {
 fn agent_subcommands_serve_the_running_agent() {
     let h = start(&[]);
     ok(&h, "create_agent", json!({"name": "alice", "prompt": "Tu es Alice."}));
-    let alice = named(&h, "alice");
-    let _server = start_agent(&h, &alice, &[]);
+    // Depuis la 0.2.0, seul `--agent NAME` sur le vrai binaire sert un agent : une copie
+    // renommée (`alice.exe`) est refusée avant tout parsing, `--agent` compris (voir
+    // `a_renamed_binary_is_refused_with_the_migration_message`).
+    let _server =
+        start_agent(&h, Path::new(env!("CARGO_BIN_EXE_swarm-control")), &["--agent", "alice"]);
 
     // ask : passe par le serveur de l'agent (réponse = le texte du tour).
-    let (code, out, err) = cli(&h, &alice, &["ask", "bonjour"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "ask", "bonjour"]);
     assert_eq!(code, 0, "{err}");
     assert!(out.contains("echo:bonjour"), "{out}");
 
-    let (code, _, err) = cli(&h, &alice, &["ask", "et re ?"]);
+    let (code, _, err) = control(&h, &["--agent", "alice", "ask", "et re ?"]);
     assert_eq!(code, 0, "{err}");
 
     // Même session au tour suivant : le statut du serveur donne la session gardée.
-    let (code, out, err) = cli(&h, &alice, &["status", "--json"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "status", "--json"]);
     assert_eq!(code, 0, "{err}");
     let status = json_out(&out);
     assert_eq!(status["state"], json!("idle"), "{status}");
@@ -89,36 +86,36 @@ fn agent_subcommands_serve_the_running_agent() {
     let session = status["session"].as_str().expect("session gardée").to_string();
 
     // L'identifiant de session revient dans la réponse du tour suivant.
-    let (_, out, _) = cli(&h, &alice, &["ask", "encore"]);
+    let (_, out, _) = control(&h, &["--agent", "alice", "ask", "encore"]);
     assert!(out.contains(&format!("resumed:{session}")), "{out}");
 
     // history : les trois tours du journal.
-    let (code, out, err) = cli(&h, &alice, &["history", "-n", "5", "--json"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "history", "-n", "5", "--json"]);
     assert_eq!(code, 0, "{err}");
     let journal = json_out(&out);
     assert_eq!(journal["turns"].as_array().unwrap().len(), 3, "{journal}");
     assert_eq!(journal["agent"], json!("alice"), "{journal}");
 
     // config : les fichiers de l'agent, secrets masqués.
-    let (code, out, err) = cli(&h, &alice, &["config", "--json"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "config", "--json"]);
     assert_eq!(code, 0, "{err}");
     let files = json_out(&out);
     assert!(!files.as_object().unwrap().is_empty(), "{files}");
 
     // schema : le schéma d'entrée de l'outil `ask`, lu sur le serveur qui tourne,
     // et l'erreur claire pour un outil inconnu.
-    let (code, out, err) = cli(&h, &alice, &["schema", "ask"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "schema", "ask"]);
     assert_eq!(code, 0, "{err}");
     assert!(out.contains("prompt"), "{out}");
-    let (code, _, err) = cli(&h, &alice, &["schema", "magie"]);
+    let (code, _, err) = control(&h, &["--agent", "alice", "schema", "magie"]);
     assert_eq!(code, 1, "{err}");
     assert!(err.contains("magie"), "{err}");
 
     // reset : la session est oubliée, le tour suivant repart à neuf.
-    let (code, out, err) = cli(&h, &alice, &["reset"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "reset"]);
     assert_eq!(code, 0, "{err}");
     assert_eq!(json_out(&out), json!({"agent": "alice", "hadSession": true}), "{out}");
-    let (code, out, err) = cli(&h, &alice, &["ask", "on recommence"]);
+    let (code, out, err) = control(&h, &["--agent", "alice", "ask", "on recommence"]);
     assert_eq!(code, 0, "{err}");
     assert!(out.contains("resumed:none"), "{out}");
 }
@@ -185,9 +182,9 @@ fn debug_prints_one_line_per_event() {
     assert!(err.contains("reprise de la session"), "{err}");
 
     // Tour via le serveur : une ligne par requête MCP côté client…
-    let carl = named(&h, "carl");
-    let _server = start_agent(&h, &carl, &[]);
-    let (code, _, err) = cli(&h, &carl, &["ask", "via serveur", "--debug"]);
+    let _server =
+        start_agent(&h, Path::new(env!("CARGO_BIN_EXE_swarm-control")), &["--agent", "carl"]);
+    let (code, _, err) = control(&h, &["--agent", "carl", "ask", "via serveur", "--debug"]);
     assert_eq!(code, 0, "{err}");
     assert!(err.contains("[debug] mcp → tools/call ask"), "{err}");
     // …et une ligne par requête reçue, dans le journal du serveur (non lu ici).
@@ -251,8 +248,7 @@ fn bad_invocations_fail_with_clear_messages() {
     assert_eq!(code, 1, "{err}");
     assert!(err.contains("fantome"), "{err}");
     // schema sans serveur annoncé : erreur d'exécution (code 1).
-    let erin = named(&h, "erin");
-    let (code, _, err) = cli(&h, &erin, &["schema", "magie"]);
+    let (code, _, err) = control(&h, &["--agent", "erin", "schema", "magie"]);
     assert_eq!(code, 1, "{err}");
     assert!(err.contains("non annoncé"), "{err}");
 
@@ -263,4 +259,43 @@ fn bad_invocations_fail_with_clear_messages() {
     assert!(out.contains("Commandes d'instance"), "{out}");
     assert!(out.contains("--debug"), "{out}");
     assert!(out.contains("--headless"), "{out}");
+}
+
+#[test]
+fn a_renamed_binary_is_refused_with_the_migration_message() {
+    let h = start(&[]);
+    ok(&h, "create_agent", json!({"name": "discord", "prompt": "Tu es Discord."}));
+    let real = Path::new(env!("CARGO_BIN_EXE_swarm-control"));
+    // Une vraie copie renommée, comme on le faisait avant la 0.2.0.
+    let copy = agent_exe(&h, "discord");
+    std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
+    std::fs::copy(real, &copy).unwrap();
+
+    // Lancée seule : refusée, code 2, avec le message de migration.
+    let (code, _, err) = cli(&h, &copy, &[]);
+    assert_eq!(code, 2, "{err}");
+    for part in ["exécutable « discord »", "0.2.0", "swarm-control build <agent>", "--agent NAME"]
+    {
+        assert!(err.contains(part), "« {part} » absent de : {err}");
+    }
+
+    // Toujours refusée avec `--agent discord` : `cli::run` examine `argv[0]` avant les
+    // arguments. Le nom de fichier ne choisit plus l'agent, il ne fait plus que refuser.
+    let (code, _, err) = cli(&h, &copy, &["--agent", "discord"]);
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("exécutable « discord »"), "{err}");
+
+    // C'est le vrai binaire qui sert discord, par `--agent` : l'instance le voit résident.
+    let agent = start_agent(&h, real, &["--agent", "discord"]);
+    let seen = ok(&h, "list_agents", json!({}));
+    let entry = seen["agents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == json!("discord"))
+        .expect("discord listé par l'instance");
+    assert!(
+        entry["resident"]["url"].as_str().unwrap().contains(&agent.port.to_string()),
+        "{entry}"
+    );
 }

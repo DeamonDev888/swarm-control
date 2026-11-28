@@ -2,9 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-/// Dossiers d'état reconnus sous le home : le nouveau d'abord, l'ancien
-/// (OverMind) ensuite, pour retrouver agents et sessions existants.
-pub const STATE_DIRS: [&str; 2] = [".swarm-control", ".overmind"];
+/// Dossier d'état sous le home : agents et sessions y sont conservés.
+pub const STATE_DIRS: [&str; 1] = [".swarm-control"];
 
 pub fn home_dir() -> PathBuf {
     std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })

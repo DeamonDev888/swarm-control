@@ -309,3 +309,273 @@ impl Drop for PanicGuard {
         self.armed.store(false, Ordering::SeqCst);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::Runner;
+    use crate::history::{self, Entry};
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    use serde_json::json;
+
+    /// Un Ctx isolé (workspace temporaire unique) : aucun serveur résident n'est démarré, donc
+    /// aucun fil de travail — un tour soumis reste en file, rien n'est lancé.
+    fn ctx(agent: &str) -> Ctx {
+        let ws = std::env::temp_dir().join(format!("swarm-tui-{}-{agent}", std::process::id()));
+        Ctx::new(agent, Runner::Claude, ws, "swarm-control-1".into())
+    }
+
+    fn state(ctx: &Ctx) -> State {
+        State::new(info::identify(ctx), false, Instant::now())
+    }
+
+    /// Un faux terminal de 100×30.
+    fn terminal() -> Terminal<TestBackend> {
+        Terminal::new(TestBackend::new(100, 30)).unwrap()
+    }
+
+    fn touche(code: KeyCode) -> Event {
+        Event::Key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    /// Une itération de `event_loop` sur le faux terminal : la touche est traduite selon l'état
+    /// de la saisie, l'action appliquée, l'écran redessiné — sans `poll`/`read` ni terminal réel.
+    fn iteration(
+        st: &mut State,
+        ctx: &Ctx,
+        term: &mut Terminal<TestBackend>,
+        event: Event,
+    ) -> Option<Exit> {
+        let action = input::translate(event, st.input_empty());
+        let exit = handle(action, st, ctx);
+        term.draw(|frame| ui::draw(frame, st)).unwrap();
+        exit
+    }
+
+    /// Tape `texte` touche par touche, comme l'utilisateur.
+    fn taper(st: &mut State, ctx: &Ctx, term: &mut Terminal<TestBackend>, texte: &str) {
+        for c in texte.chars() {
+            assert_eq!(iteration(st, ctx, term, touche(KeyCode::Char(c))), None, "touche {c:?}");
+        }
+    }
+
+    fn ecran(term: &mut Terminal<TestBackend>) -> String {
+        term.backend().to_string()
+    }
+
+    fn notice(st: &State) -> String {
+        st.notice.as_ref().map(|n| n.text.clone()).unwrap_or_default()
+    }
+
+    fn tour(ts: u64, prompt: &str) -> Entry {
+        Entry { ts, prompt: prompt.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn le_rendu_initial_montre_les_panneaux_et_est_deterministe() {
+        let ctx = ctx("rendu");
+        let mut st = state(&ctx);
+        let mut term = terminal();
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        let premier = ecran(&mut term);
+        for panneau in ["agent", "serveurs MCP", "conversation", "file et tour en cours", "message"]
+        {
+            assert!(premier.contains(panneau), "panneau absent « {panneau} »\n{premier}");
+        }
+        // État vide : placeholders prévus, aucun panic.
+        assert!(premier.contains("le journal est vide"));
+        assert!(premier.contains("au repos"));
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        assert_eq!(ecran(&mut term), premier, "même état → même écran");
+        // Terminal trop petit : un message, pas de panic.
+        let mut petit = Terminal::new(TestBackend::new(30, 10)).unwrap();
+        petit.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        assert!(petit.backend().to_string().contains("terminal trop petit"));
+    }
+
+    #[test]
+    fn la_saisie_part_dans_la_file_de_l_agent_par_un_ask_sans_lancer_de_tour() {
+        let ctx = ctx("envoi");
+        let mut st = state(&ctx);
+        let mut term = terminal();
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        taper(&mut st, &ctx, &mut term, "état du marché ?");
+        assert_eq!(st.input, "état du marché ?");
+        assert!(ecran(&mut term).contains("état du marché ?"), "la saisie s'affiche");
+        assert_eq!(ctx.status_json()["queueLength"], json!(0), "rien n'est envoyé avant Entrée");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Enter)), None);
+        assert!(st.input.is_empty(), "la saisie est détournée");
+        let status = ctx.status_json();
+        assert_eq!(status["queueLength"], json!(1), "le tour est dans la file de l'agent");
+        assert_eq!(status["state"], json!("idle"), "aucun fil de travail : rien ne tourne");
+        assert!(notice(&st).contains("demande envoyée"), "{}", notice(&st));
+        assert!(ecran(&mut term).contains("demande envoyée"));
+    }
+
+    #[test]
+    fn entree_sur_ligne_vide_avertit_et_n_envoie_rien() {
+        let ctx = ctx("vide");
+        let mut st = state(&ctx);
+        let mut term = terminal();
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Enter)), None);
+        assert_eq!(ctx.status_json()["queueLength"], json!(0));
+        assert!(notice(&st).contains("vide"), "{}", notice(&st));
+    }
+
+    #[test]
+    fn les_raccourcis_r_s_d_q_n_agissent_que_sur_une_ligne_vide() {
+        let ctx = ctx("raccourcis");
+        let mut st = state(&ctx);
+        let mut term = terminal();
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        // Ligne vide : `r` oublie la session, `s` tue le tour, `d` bascule les logs.
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Char('r'))), None);
+        assert!(notice(&st).contains("aucune session à oublier"), "{}", notice(&st));
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Char('s'))), None);
+        assert!(notice(&st).contains("aucun tour en cours"), "{}", notice(&st));
+        assert!(!st.show_logs);
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Char('d'))), None);
+        assert!(st.show_logs);
+        assert!(ecran(&mut term).contains("logs · sortie brute du dernier tour"), "panneau logs");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Char('d'))), None);
+        assert!(!st.show_logs);
+        assert!(!ecran(&mut term).contains("logs · sortie brute du dernier tour"), "masqué");
+        assert!(st.input.is_empty(), "aucun raccourci n'écrit dans la saisie");
+        // Ligne écrite (une espace de tête, puis les quatre lettres) : tout est du texte, rien
+        // ne se déclenche, pas même `q`.
+        taper(&mut st, &ctx, &mut term, " qrsd");
+        assert_eq!(st.input, " qrsd");
+        assert!(!st.show_logs);
+        assert_eq!(ctx.status_json()["queueLength"], json!(0));
+        // Entrée envoie le mot tel quel (l'espace de tête est retirée) ; la ligne redevient vide.
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Enter)), None);
+        assert_eq!(ctx.status_json()["queueLength"], json!(1));
+        assert!(st.input.is_empty());
+        // `q` sur une ligne vide ferme la TUI : le contrat avec cli/agent.rs.
+        assert_eq!(
+            iteration(&mut st, &ctx, &mut term, touche(KeyCode::Char('q'))),
+            Some(Exit::Quit)
+        );
+    }
+
+    #[test]
+    fn echap_efface_la_saisie_et_reaffiche_le_placeholder() {
+        let ctx = ctx("echap");
+        let mut st = state(&ctx);
+        let mut term = terminal();
+        taper(&mut st, &ctx, &mut term, "bonjour");
+        assert!(ecran(&mut term).contains("bonjour"), "la saisie s'affiche");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Esc)), None);
+        assert!(st.input.is_empty(), "Échap efface la ligne");
+        let vide = ecran(&mut term);
+        assert!(!vide.contains("bonjour"), "{vide}");
+        assert!(vide.contains("écrivez un message…"), "{vide}");
+        // Échap sur une ligne déjà vide : rien, pas de panique.
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Esc)), None);
+        assert!(st.input.is_empty());
+    }
+
+    #[test]
+    fn le_defilement_est_borne_par_ce_qui_a_ete_rendu() {
+        let ctx = ctx("defilement");
+        let mut st = state(&ctx);
+        st.apply_history((1..=12).map(|i| tour(i, &format!("tour {i:02}"))).collect());
+        let mut term = terminal();
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        let bas = ecran(&mut term);
+        assert!(bas.contains("tour 12") && !bas.contains("tour 01"), "en bas : la fin\n{bas}");
+        assert!(st.conversation.following());
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::PageUp)), None);
+        assert_eq!(st.conversation.offset(), 10);
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Up)), None);
+        assert_eq!(st.conversation.offset(), 11);
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Home)), None);
+        let haut = ecran(&mut term);
+        assert!(
+            haut.contains("tour 01") && !haut.contains("tour 12"),
+            "en haut : le début\n{haut}"
+        );
+        let maximum = st.conversation.offset();
+        assert!(maximum >= 11, "Home va jusqu'à la borne rendue ({maximum})");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::PageUp)), None);
+        assert_eq!(st.conversation.offset(), maximum, "borné par ce qui a été rendu");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::End)), None);
+        assert_eq!(st.conversation.offset(), 0);
+        assert!(ecran(&mut term).contains("tour 12"), "End revient à la fin");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Down)), None);
+        assert_eq!(st.conversation.offset(), 0, "déjà en bas : on ne descend pas plus bas");
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::PageUp)), None);
+        assert_eq!(st.conversation.offset(), 10);
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::PageDown)), None);
+        assert_eq!(st.conversation.offset(), 0);
+        // Un contenu plus court que la vue : plus aucun décalage possible.
+        st.apply_history(vec![tour(1, "seul tour")]);
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        assert_eq!(iteration(&mut st, &ctx, &mut term, touche(KeyCode::Home)), None);
+        assert_eq!(st.conversation.offset(), 0);
+    }
+
+    #[test]
+    fn la_premiere_synchronisation_alimente_statut_et_journal() {
+        let ctx = ctx("sync");
+        let mut st = state(&ctx);
+        sync(&ctx, &mut st, None);
+        assert_eq!(st.status.state, "idle", "aucun tour en cours sur un contexte neuf");
+        assert!(st.fingerprint.is_some(), "le journal a été relu (même vide)");
+        assert!(st.conversation.is_empty());
+    }
+
+    #[test]
+    fn la_synchronisation_charge_le_journal_de_l_agent_dans_la_conversation() {
+        let ctx = ctx("journal");
+        history::record(
+            &ctx.workspace,
+            "claude",
+            &ctx.agent,
+            Entry { prompt: "question ?".into(), reply: "réponse.".into(), ..Default::default() },
+        );
+        let mut st = state(&ctx);
+        sync(&ctx, &mut st, None);
+        assert_eq!(st.conversation.len(), 1);
+        assert_eq!(st.conversation.entries()[0].reply, "réponse.");
+        let mut term = terminal();
+        term.draw(|frame| ui::draw(frame, &mut st)).unwrap();
+        let ecran = ecran(&mut term);
+        assert!(ecran.contains("conversation (1)"), "{ecran}");
+        assert!(ecran.contains("question ?") && ecran.contains("réponse."), "{ecran}");
+        let _ = std::fs::remove_dir_all(&ctx.workspace);
+    }
+
+    #[test]
+    fn les_messages_du_fil_des_sondes_sont_vides_dans_l_etat() {
+        let ctx = ctx("sondes");
+        let (tx, rx) = mpsc::channel();
+        tx.send(ProbeMsg::Model(Some("sonnet-4-5".into()))).unwrap();
+        tx.send(ProbeMsg::Peers(vec![PeerRow {
+            name: "swarm-alice".into(),
+            addr: "127.0.0.1:23082".into(),
+            alive: true,
+            own: true,
+            state: "ok".into(),
+            detail: "idle · file 0".into(),
+        }]))
+        .unwrap();
+        drop(tx);
+        let mut st = state(&ctx);
+        sync(&ctx, &mut st, Some(&rx));
+        assert_eq!(st.model.as_deref(), Some("sonnet-4-5"));
+        assert_eq!(st.peers.len(), 1);
+        assert!(st.peers[0].own);
+        // Canal épuisé (fil des sondes parti) : le passage suivant ne bloque pas, ne change rien.
+        sync(&ctx, &mut st, Some(&rx));
+        assert_eq!(st.peers.len(), 1);
+        assert_eq!(st.model.as_deref(), Some("sonnet-4-5"));
+    }
+
+    #[test]
+    fn sans_run_vivant_la_sortie_affichee_est_celle_du_dernier_tour() {
+        let ctx = ctx("logs");
+        assert_eq!(live_output(&ctx), "", "registre sans run : la sortie du contexte (vide)");
+    }
+}

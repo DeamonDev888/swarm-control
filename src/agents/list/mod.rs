@@ -12,7 +12,7 @@ use std::path::Path;
 pub fn list(ws: &Path) -> Vec<AgentInfo> {
     let mut out = claude::scan(ws);
     for agent in hermes::scan() {
-        // Un nom déjà pris côté Claude garde son entrée (comme l'OverMind TS).
+        // Un nom déjà pris côté Claude garde son entrée.
         if !out.iter().any(|a| a.name == agent.name) {
             out.push(agent);
         }

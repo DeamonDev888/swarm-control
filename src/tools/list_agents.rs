@@ -10,8 +10,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::Path;
 
-const DESCRIPTION: &str = "Liste les agents (Claude, Hermes et Antigravity) avec leur état de session, leur run en cours \
-    et, s'ils sont résidents, l'instance et l'URL qui les héberge. details:true ajoute modèle, MCP, \
+const DESCRIPTION: &str = "Liste les agents (Claude, Hermes et Antigravity) avec leur état de session, leur run en cours, leur classe (logo) et, s'ils sont résidents, l'instance et l'URL qui les héberge. details:true ajoute modèle, MCP, \
     taille du prompt.";
 
 #[derive(Deserialize)]
@@ -42,6 +41,9 @@ fn describe(ws: &Path, info: &AgentInfo, details: bool) -> Value {
     let mut v = json!({
         "name": info.name,
         "runner": runner,
+        // Classe affichable posée par le modèle à la création (MCP Control : logo) —
+        // lue dans la définition, jamais déduite du nom (TODO §4.1).
+        "class": agents::class_of(ws, &info.name, info.runner),
         "hasSession": session.is_some(),
         "running": running,
     });

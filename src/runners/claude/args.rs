@@ -3,11 +3,28 @@
 use super::settings::AgentSetup;
 use crate::config;
 use crate::runners::RunRequest;
+use crate::tools::run_args::current_archetype;
 
 /// Limite de ligne de commande Windows (~32 Kio) : une persona plus longue
 /// est ajoutée au début du prompt (stdin) à la place.
 const MAX_PERSONA_ARG: usize = 20_000;
 const DEFAULT_PERMISSIONS: &str = "--dangerously-skip-permissions";
+
+/// Archétypes en lecture seule (PLAN §4.3) : ils cherchent ou relisent, sans écrire.
+const RESTRICTED_ARCHETYPES: &[&str] = &["explorer", "verifier"];
+/// Outils de lecture autorisés sans invite pour ces archétypes (`--allowedTools`).
+const READ_ONLY_TOOLS: &str = "Read,Grep,Glob,LS,WebFetch,WebSearch";
+
+/// Arguments de permissions d'un tour. Un archétype restreint passe toujours en
+/// lecture seule, même si `CLAUDE_PERMISSIONS` demande le contraire : la restriction
+/// d'archétype est un plancher de sécurité (PLAN §4.3), pas un simple défaut.
+fn permission_args(archetype: Option<&str>, configured: Option<&str>) -> Vec<String> {
+    if archetype.is_some_and(|a| RESTRICTED_ARCHETYPES.contains(&a)) {
+        vec!["--allowedTools".into(), READ_ONLY_TOOLS.into()]
+    } else {
+        configured.unwrap_or(DEFAULT_PERMISSIONS).split_whitespace().map(String::from).collect()
+    }
+}
 
 /// `(arguments, prompt envoyé sur stdin)`.
 pub fn build(
@@ -17,9 +34,8 @@ pub fn build(
     resume: Option<&str>,
 ) -> (Vec<String>, String) {
     let mut args: Vec<String> = ["-p", "--output-format", "json"].map(String::from).to_vec();
-    let permissions =
-        config::app_var("CLAUDE_PERMISSIONS").unwrap_or_else(|| DEFAULT_PERMISSIONS.into());
-    args.extend(permissions.split_whitespace().map(String::from));
+    let configured = config::app_var("CLAUDE_PERMISSIONS");
+    args.extend(permission_args(current_archetype().as_deref(), configured.as_deref()));
     push_files(&mut args, setup);
     push_pair(&mut args, "--resume", resume);
     push_pair(&mut args, "--model", model);
@@ -67,7 +83,48 @@ fn apply_persona(
 
 #[cfg(test)]
 mod tests {
-    use super::apply_persona;
+    use super::AgentSetup;
+    use super::{DEFAULT_PERMISSIONS, apply_persona, build, permission_args};
+    use crate::agents::Runner;
+    use crate::config;
+    use crate::runners::RunRequest;
+    use crate::tools::run_args::with_archetype;
+    use std::path::PathBuf;
+
+    fn req() -> RunRequest {
+        RunRequest {
+            runner: Runner::Claude,
+            prompt: "salut".into(),
+            agent: None,
+            session_id: None,
+            auto_resume: false,
+            model: None,
+            provider: None,
+            cwd: None,
+            workspace: PathBuf::from("."),
+        }
+    }
+
+    #[test]
+    fn restricted_archetypes_get_read_only_tools_instead_of_skip() {
+        for archetype in ["explorer", "verifier"] {
+            let args = permission_args(Some(archetype), Some(DEFAULT_PERMISSIONS));
+            assert_eq!(args, vec!["--allowedTools", "Read,Grep,Glob,LS,WebFetch,WebSearch"]);
+        }
+    }
+
+    #[test]
+    fn unrestricted_archetypes_keep_the_configured_permissions() {
+        assert_eq!(
+            permission_args(Some("coder"), Some("--dangerously-skip-permissions")),
+            vec!["--dangerously-skip-permissions"]
+        );
+        assert_eq!(permission_args(None, None), vec!["--dangerously-skip-permissions"]);
+        assert_eq!(
+            permission_args(Some("coordinator"), Some("--allowedTools Read")),
+            vec!["--allowedTools", "Read"]
+        );
+    }
 
     #[test]
     fn short_persona_goes_to_the_system_prompt() {
@@ -84,5 +141,25 @@ mod tests {
         assert!(apply_persona(&mut args, Some(&long), "salut", None).ends_with("salut"));
         assert!(args.is_empty());
         assert_eq!(apply_persona(&mut args, Some(&long), "salut", Some("sid")), "salut");
+    }
+
+    #[test]
+    fn restricted_archetype_run_gets_allowed_tools_and_no_skip() {
+        let setup = AgentSetup::default();
+        let (args, _) = with_archetype(Some("explorer"), || build(&req(), &setup, None, None));
+        let joined = args.join(" ");
+        assert!(joined.contains("--allowedTools"), "{joined}");
+        assert!(!joined.contains("dangerously-skip-permissions"), "{joined}");
+    }
+
+    #[test]
+    fn plain_run_keeps_the_effective_permissions() {
+        let setup = AgentSetup::default();
+        let configured = config::app_var("CLAUDE_PERMISSIONS");
+        let expected = permission_args(None, configured.as_deref());
+        let (args, _) = with_archetype(Some("coder"), || build(&req(), &setup, None, None));
+        let mut head = vec!["-p".into(), "--output-format".into(), "json".into()];
+        head.extend(expected);
+        assert!(args.starts_with(&head), "{args:?}");
     }
 }

@@ -5,14 +5,15 @@
 //!
 //! ```text
 //! swarm-control [--workspace DIR] agents
-//! sniper ask "état du marché ?" --model sonnet --timeout-ms 600000
-//! swarm-control run sniper "résume la journée"
+//! discord ask "état du marché ?" --model sonnet --timeout-ms 600000
+//! swarm-control run discord "résume la journée"
 //! ```
 //!
 //! Les options propres au serveur restent celles d'avant (`--port`, `--host`, `--resident`…),
 //! complétées par `--headless`, `--debug`, `--json` et `--runner`.
 
 use crate::agents::Runner;
+use crate::residents::Dialect;
 use std::path::PathBuf;
 
 /// Attente par défaut d'un tour (`ask` / `run`) : 1 h.
@@ -34,8 +35,14 @@ pub struct Options {
     /// Agent visé : mode agent (`--agent NAME`, ou exécutable nommé d'après l'agent) pour
     /// `serve` ; cible des autres commandes.
     pub agent: Option<String>,
-    /// Port du pont HTTP compatible `overmind-bridge` (`--bridge N`, mode agent seulement).
+    /// Port du pont HTTP parlant le dialecte Discord (`--bridge N`, mode agent seulement).
     pub bridge: Option<u16>,
+    /// Dialecte du pont (`--bridge-dialect discord|whatsapp|raw`, défaut `discord`).
+    pub bridge_dialect: Option<Dialect>,
+    /// Tâche planifiée : `--every 5m "<prompt>"` (intervalle + prompt positionnel).
+    pub every: Option<String>,
+    /// Fenêtre horaire de la tâche planifiée (`--window 09:00-18:00`, optionnelle).
+    pub window: Option<String>,
     /// Mode agent : pas de TUI, bannière puis attente.
     pub headless: bool,
     /// Journal de diagnostic sur stderr (`SWARM_DEBUG=1` fait de même).
@@ -60,6 +67,9 @@ impl Default for Options {
             instance: None,
             agent: None,
             bridge: None,
+            bridge_dialect: None,
+            every: None,
+            window: None,
             headless: false,
             debug: false,
             json: false,
@@ -86,10 +96,14 @@ pub enum Command {
     Schema { tool: String },
     /// `agents` : agents du workspace et leur résidence.
     Agents,
+    /// `templates` : modèles d'agents disponibles (intégrés + surcharges du workspace).
+    Templates,
     /// `run <agent> "<prompt>"` : un tour pour un agent nommé.
     Run { agent: String, prompt: String },
     /// `runs` : dernier run de chaque agent.
     Runs,
+    /// `build <agent>` : recompile le binaire dédié de l'agent (`--offline` : sans réseau).
+    Build { agent: String, offline: bool },
     /// `doctor` : diagnostics non destructifs.
     Doctor,
 }
@@ -105,8 +119,10 @@ impl Command {
             Command::Config { .. } => "config",
             Command::Schema { .. } => "schema",
             Command::Agents => "agents",
+            Command::Templates => "templates",
             Command::Run { .. } => "run",
             Command::Runs => "runs",
+            Command::Build { .. } => "build",
             Command::Doctor => "doctor",
         }
     }
@@ -143,8 +159,10 @@ enum Kind {
     Config,
     Schema,
     Agents,
+    Templates,
     Run,
     Runs,
+    Build,
     Doctor,
 }
 
@@ -159,8 +177,10 @@ impl Kind {
             "config" => Kind::Config,
             "schema" => Kind::Schema,
             "agents" => Kind::Agents,
+            "templates" => Kind::Templates,
             "run" => Kind::Run,
             "runs" => Kind::Runs,
+            "build" => Kind::Build,
             "doctor" => Kind::Doctor,
             other => return Err(format!("commande inconnue: {other} (voir --help)")),
         })
@@ -173,6 +193,8 @@ struct CommandOptions {
     limit: Option<usize>,
     before: Option<u64>,
     file: Option<String>,
+    /// `build --offline` : `cargo build --offline`.
+    offline: bool,
 }
 
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
@@ -200,9 +222,16 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
             }
             "--agent" | "-a" => options.agent = Some(value(&mut args, "--agent")?),
             "--bridge" | "-b" => options.bridge = Some(parse_port(&value(&mut args, "--bridge")?)?),
+            "--bridge-dialect" => {
+                let raw = value(&mut args, "--bridge-dialect")?;
+                options.bridge_dialect = Some(parse_dialect(&raw)?);
+            }
+            "--every" => options.every = Some(value(&mut args, "--every")?),
+            "--window" => options.window = Some(value(&mut args, "--window")?),
             "--headless" => options.headless = true,
             "--debug" => options.debug = true,
             "--json" => options.json = true,
+            "--offline" => command_options.offline = true,
             "--runner" | "-R" => {
                 options.runner = Some(parse_runner(&value(&mut args, "--runner")?)?)
             }
@@ -245,7 +274,7 @@ fn build(
     positional: &[String],
     command_options: CommandOptions,
 ) -> Result<Command, String> {
-    let CommandOptions { limit, before, file } = command_options;
+    let CommandOptions { limit, before, file, offline } = command_options;
     Ok(match kind {
         Kind::Serve => unreachable!("serve est traité avant build"),
         Kind::Ask => Command::Ask { prompt: one(positional, "ask", "un prompt : ask \"…\"")? },
@@ -272,6 +301,10 @@ fn build(
             no_more(positional, "agents")?;
             Command::Agents
         }
+        Kind::Templates => {
+            no_more(positional, "templates")?;
+            Command::Templates
+        }
         Kind::Run => match positional {
             [agent, prompt] => Command::Run { agent: agent.clone(), prompt: prompt.clone() },
             [] | [_] => return Err("run attend un agent et un prompt : run AGENT \"…\"".into()),
@@ -280,6 +313,9 @@ fn build(
         Kind::Runs => {
             no_more(positional, "runs")?;
             Command::Runs
+        }
+        Kind::Build => {
+            Command::Build { agent: one(positional, "build", "un agent : build AGENT")?, offline }
         }
         Kind::Doctor => {
             no_more(positional, "doctor")?;
@@ -306,6 +342,11 @@ fn parse_instance(raw: &str) -> Result<u32, String> {
 fn parse_runner(raw: &str) -> Result<Runner, String> {
     Runner::parse(raw)
         .ok_or_else(|| format!("runner: claude, hermes ou antigravity attendu (reçu « {raw} »)"))
+}
+
+fn parse_dialect(raw: &str) -> Result<Dialect, String> {
+    Dialect::parse(raw)
+        .map_err(|_| format!("--bridge-dialect: discord, whatsapp ou raw attendu (reçu « {raw} »)"))
 }
 
 fn parse_count(raw: &str, flag: &str) -> Result<u64, String> {
@@ -343,6 +384,7 @@ fn one(positional: &[String], command: &str, what: &str) -> Result<String, Strin
 mod tests {
     use super::{Command, DEFAULT_TIMEOUT_MS, Options, Parsed, parse};
     use crate::agents::Runner;
+    use crate::residents::Dialect;
 
     fn run(args: &[&str]) -> Result<Parsed, String> {
         parse(args.iter().map(|s| s.to_string()))
@@ -392,8 +434,8 @@ mod tests {
 
     #[test]
     fn reads_agent_mode_and_bridge() {
-        let o = serve(&["--agent", "sniper", "-b", "3001"]);
-        assert_eq!((o.agent.as_deref(), o.bridge), (Some("sniper"), Some(3001)));
+        let o = serve(&["--agent", "discord", "-b", "3001"]);
+        assert_eq!((o.agent.as_deref(), o.bridge), (Some("discord"), Some(3001)));
         assert!(run(&["--bridge", "x"]).is_err());
         assert!(run(&["--agent"]).is_err());
     }
@@ -463,20 +505,21 @@ mod tests {
 
     #[test]
     fn run_takes_an_agent_and_a_prompt() {
-        match command(&["run", "sniper", "résume"]) {
+        match command(&["run", "discord", "résume"]) {
             Command::Run { agent, prompt } => {
-                assert_eq!((agent.as_str(), prompt.as_str()), ("sniper", "résume"));
+                assert_eq!((agent.as_str(), prompt.as_str()), ("discord", "résume"));
             }
             _ => panic!("run attendu"),
         }
         assert!(run(&["run"]).is_err());
-        assert!(run(&["run", "sniper"]).is_err());
-        assert!(run(&["run", "sniper", "a", "b"]).is_err());
+        assert!(run(&["run", "discord"]).is_err());
+        assert!(run(&["run", "discord", "a", "b"]).is_err());
     }
 
     #[test]
     fn instance_commands_and_schema() {
         assert!(matches!(command(&["agents"]), Command::Agents));
+        assert!(matches!(command(&["templates"]), Command::Templates));
         assert!(matches!(command(&["runs"]), Command::Runs));
         assert!(matches!(command(&["doctor"]), Command::Doctor));
         match command(&["schema", "run_agent", "--port", "23080"]) {
@@ -485,6 +528,7 @@ mod tests {
         }
         assert!(run(&["schema"]).is_err());
         assert!(run(&["agents", "x"]).is_err());
+        assert!(run(&["templates", "x"]).is_err());
         assert!(run(&["schema", "a", "--agent", "bob"]).is_ok());
     }
 
@@ -497,6 +541,41 @@ mod tests {
             }
             _ => panic!("runs attendu"),
         }
+    }
+
+    #[test]
+    fn reads_the_bridge_dialect_and_the_schedule() {
+        let o = serve(&["-b", "3011", "--bridge-dialect", "whatsapp"]);
+        assert_eq!(o.bridge_dialect, Some(Dialect::Whatsapp));
+        let o = serve(&["--every", "5m", "--window", "09:00-18:00"]);
+        assert_eq!(o.every.as_deref(), Some("5m"));
+        assert_eq!(o.window.as_deref(), Some("09:00-18:00"));
+        assert!(run(&["--bridge-dialect", "telegram"]).is_err());
+        assert!(run(&["--bridge-dialect"]).is_err());
+        assert!(run(&["--every"]).is_err());
+        assert!(run(&["--window"]).is_err());
+    }
+
+    #[test]
+    fn build_prend_un_agent_et_offline() {
+        match command(&["build", "discord"]) {
+            Command::Build { agent, offline } => {
+                assert_eq!((agent.as_str(), offline), ("discord", false))
+            }
+            _ => panic!("build attendu"),
+        }
+        match command(&["build", "--offline", "discord"]) {
+            Command::Build { agent, offline } => {
+                assert_eq!((agent.as_str(), offline), ("discord", true))
+            }
+            _ => panic!("build attendu"),
+        }
+        match run(&["--offline", "build", "discord"]) {
+            Ok(Parsed::Command(_, Command::Build { offline, .. })) => assert!(offline),
+            _ => panic!("build attendu"),
+        }
+        assert!(run(&["build"]).is_err(), "un agent est requis");
+        assert!(run(&["build", "a", "b"]).is_err(), "un seul agent");
     }
 
     #[test]

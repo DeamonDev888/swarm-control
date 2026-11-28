@@ -1,6 +1,7 @@
-//! Mode agent : un exécutable par agent, et le pont HTTP compatible `overmind-bridge`.
+//! Mode agent : un seul agent par process, servi par `--agent NAME`, et le pont HTTP parlant
+//! le dialecte Discord.
 
-use crate::harness::{agent_exe, command, start, start_agent};
+use crate::harness::{command, start, start_agent};
 use crate::rpc::{ok, ok_at, rpc_at};
 use serde_json::{Value, json};
 use std::io::{Read, Write};
@@ -40,10 +41,17 @@ fn send(port: u16, message: &str) -> Value {
 }
 
 #[test]
-fn a_renamed_binary_serves_its_agent_alone() {
+fn the_agent_flag_serves_the_agent_alone() {
     let h = start(&[]);
     ok(&h, "create_agent", json!({"name": "alice", "prompt": "Tu es Alice."}));
-    let agent = start_agent(&h, &agent_exe(&h, "alice"), &[]);
+    // Depuis la 0.2.0, seul `--agent NAME` sur le vrai binaire sert un agent : une copie
+    // renommée (`alice.exe`) est refusée, `--agent` compris (voir
+    // `agent_cli::a_renamed_binary_is_refused_with_the_migration_message`).
+    let agent = start_agent(
+        &h,
+        std::path::Path::new(env!("CARGO_BIN_EXE_swarm-control")),
+        &["--agent", "alice"],
+    );
 
     // Son serveur MCP : les outils de l'agent, pas ceux d'une instance d'administration.
     let listed = rpc_at(agent.port, "tools/list", None, json!({}));
@@ -54,7 +62,21 @@ fn a_renamed_binary_serves_its_agent_alone() {
         .map(|t| t["name"].as_str().unwrap())
         .collect();
     tools.sort();
-    assert_eq!(tools, ["ask", "config", "history", "logs", "session", "status", "stop"]);
+    assert_eq!(
+        tools,
+        [
+            "ask",
+            "config",
+            "history",
+            "logs",
+            "memory_forget",
+            "memory_search",
+            "memory_store",
+            "session",
+            "status",
+            "stop"
+        ]
+    );
     let reply = ok_at(agent.port, "ask", json!({"prompt": "bonjour"}));
     assert!(reply["reply"].as_str().unwrap().contains("echo:bonjour"), "{reply}");
     assert_eq!(agent.bridge, None, "pas de pont sans --bridge");
@@ -67,14 +89,14 @@ fn a_renamed_binary_serves_its_agent_alone() {
 }
 
 #[test]
-fn the_bridge_speaks_the_overmind_bridge_dialect() {
+fn the_bridge_speaks_the_discord_dialect() {
     let h = start(&[]);
-    ok(&h, "create_agent", json!({"name": "sniper", "prompt": "Tu es Sniper."}));
-    // `--agent` choisit l'agent quel que soit le nom de l'exécutable.
+    ok(&h, "create_agent", json!({"name": "discord", "prompt": "Tu es Discord."}));
+    // `--agent` choisit l'agent servi ; le nom de l'exécutable ne le désigne plus.
     let agent = start_agent(
         &h,
         std::path::Path::new(env!("CARGO_BIN_EXE_swarm-control")),
-        &["--agent", "sniper", "--bridge", "0"],
+        &["--agent", "discord", "--bridge", "0"],
     );
     let port = agent.bridge.expect("port du pont dans la bannière");
 
@@ -107,11 +129,11 @@ fn the_bridge_speaks_the_overmind_bridge_dialect() {
     let (status, state) = http(port, "GET", "/status", None);
     assert_eq!(
         (status, state["agent"].as_str(), state["turnsDone"].as_u64()),
-        (200, Some("sniper"), Some(3))
+        (200, Some("discord"), Some(3))
     );
     assert_eq!(
         http(port, "GET", "/health", None),
-        (200, json!({"status": "ok", "agent": "sniper"}))
+        (200, json!({"status": "ok", "agent": "discord"}))
     );
     let (status, missing) = http(port, "POST", "/send", Some(json!({"userId": "42"})));
     assert_eq!((status, missing["error"].as_str()), (400, Some("Message is required")));

@@ -3,7 +3,7 @@ use crate::rpc::rpc;
 use serde_json::json;
 
 #[test]
-fn exposes_the_ten_tools() {
+fn exposes_the_eleven_tools() {
     let h = start(&[]);
     let resp = rpc(&h, "tools/list", None, json!({}));
     let mut names: Vec<String> = resp["result"]["tools"]
@@ -23,6 +23,7 @@ fn exposes_the_ten_tools() {
             "delete_agent",
             "get_agent_configs",
             "list_agents",
+            "list_templates",
             "run_agent",
             "run_agents_parallel",
             "update_agent_config"

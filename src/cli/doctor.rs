@@ -1,5 +1,8 @@
 //! `doctor` : diagnostics **non destructifs** du workspace et de l'installation.
 //!
+//! Avec `--agent X`, ajoute les prérequis du modèle de cet agent : variables requises,
+//! serveurs MCP attendus, binaire du runner (voir `agents::templates`).
+//!
 //! Chaque contrôle écrit une ligne `✓` (tout va bien) ou `✗` (à corriger). Seuls les échecs
 //! **indispensables** — le workspace, l'écriture de `bridge/` et de `bridge/history/` — font
 //! sortir en code 1 : un binaire absent ou un `.mcp.json` manquant se voit, mais n'empêche pas
@@ -7,12 +10,13 @@
 
 use super::args::Options;
 use super::target;
+use crate::agents::{Runner, templates};
 use crate::{agents, binaries, peers};
 use serde_json::Value;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-pub fn run(_options: &Options, ws: &Path) -> Result<(), String> {
+pub fn run(options: &Options, ws: &Path) -> Result<(), String> {
     let mut checks = Checks::default();
     workspace(&mut checks, ws);
     mcp_config(&mut checks, ws);
@@ -22,6 +26,10 @@ pub fn run(_options: &Options, ws: &Path) -> Result<(), String> {
     instances(&mut checks);
     advertised_agents(&mut checks);
     writable(&mut checks, ws);
+    // `--agent X` : prérequis du modèle de cet agent (variables, serveurs MCP, binaire).
+    if let Some(agent) = options.agent.as_deref() {
+        template_checks(&mut checks, options, ws, agent);
+    }
 
     for line in &checks.lines {
         println!("{line}");
@@ -31,6 +39,79 @@ pub fn run(_options: &Options, ws: &Path) -> Result<(), String> {
         return Err(format!("{} contrôle(s) indispensable(s) en échec.", checks.essential));
     }
     Ok(())
+}
+
+/// Prérequis du modèle d'un agent (`doctor --agent X`) : variables requises fournies,
+/// serveurs MCP attendus déclarés dans le workspace, binaire du runner présent. Tout se
+/// signale sans bloquer : ces absences ne rendent pas l'instance inutilisable.
+fn template_checks(checks: &mut Checks, options: &Options, ws: &Path, agent: &str) {
+    let runner = match agents::resolve(ws, agent, options.runner) {
+        Ok(runner) => runner,
+        Err(e) => {
+            checks.warn("modèle", format!("{agent} : {e}"));
+            return;
+        }
+    };
+    let class = agents::class_of(ws, agent, runner).unwrap_or_else(|| "-".into());
+    let Some(name) = templates::template_of(ws, agent, runner) else {
+        checks.ok("modèle", format!("{agent} : aucun (créé sans modèle)"));
+        return;
+    };
+    let loaded = match templates::load(ws, &name) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            checks.warn("modèle", format!("{agent} : '{name}' illisible ({e})"));
+            return;
+        }
+    };
+    checks.ok("modèle", format!("{agent} : '{name}' (classe : {class})"));
+    // Variables requises : toutes présentes, ou la liste de celles qui manquent.
+    let missing = templates::missing_vars(&loaded.template);
+    let count = loaded.template.required_vars.len();
+    if missing.is_empty() {
+        let detail = if count == 0 {
+            format!("{agent} : aucune (modèle '{name}')")
+        } else {
+            format!("{agent} : {count} présente(s) (modèle '{name}')")
+        };
+        checks.ok("variables requises", detail);
+    } else {
+        checks.warn(
+            "variables requises",
+            format!("{agent} : manquantes {} (modèle '{name}')", missing.join(", ")),
+        );
+    }
+    // Serveurs MCP attendus : déclarés dans le `.mcp.json` du workspace ?
+    let absent = templates::missing_servers(ws, &loaded.template);
+    let count = loaded.template.expected_mcp_servers.len();
+    if absent.is_empty() {
+        let detail = if count == 0 {
+            format!("{agent} : aucun (modèle '{name}')")
+        } else {
+            format!("{agent} : {count} déclaré(s) (modèle '{name}')")
+        };
+        checks.ok("serveurs MCP attendus", detail);
+    } else {
+        checks.warn(
+            "serveurs MCP attendus",
+            format!("{agent} : absents du workspace : {} (modèle '{name}')", absent.join(", ")),
+        );
+    }
+    // Binaire du runner : sans lui, aucun tour ne démarre.
+    let binary = match runner {
+        Runner::Claude => binaries::claude_binary(),
+        Runner::Hermes => binaries::hermes_binary(),
+        Runner::Antigravity => binaries::antigravity_binary(),
+    };
+    if binary.is_file() {
+        checks.ok("binaire du runner", format!("{agent} : {}", binary.display()));
+    } else {
+        checks.warn("binaire du runner", format!("{agent} : introuvable ({})", binary.display()));
+    }
+    // Port de pont conseillé par le modèle : information, jamais un échec.
+    if let Some(port) = loaded.template.defaults.bridge_port {
+        checks.ok("pont conseillé", format!("{agent} : --bridge {port} (modèle '{name}')"));
+    }
 }
 
 fn workspace(checks: &mut Checks, ws: &Path) {

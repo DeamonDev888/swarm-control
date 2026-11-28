@@ -6,6 +6,9 @@ use super::{acquire, path};
 use crate::store::now_ms;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Barrier};
+// Utilisés seulement par les tests `#[cfg(windows)]` ci-dessous (sondes tasklist) :
+// confinés à Windows pour ne pas alerter clippy (unused_imports) sur les autres cibles.
+#[cfg(windows)]
 use std::time::{Duration, Instant};
 
 const THREADS: usize = 16;
@@ -53,6 +56,13 @@ fn exactly_one_taker_over_a_dead_lease_wins() {
     };
     std::fs::write(path::file(&ws, "claude", "alice"), serde_json::to_vec(&ghost).unwrap())
         .unwrap();
+    // Prémisses et calme avant la course : le PID fantôme doit être jugé mort, et la
+    // sonde initiale (un `tasklist` sous Windows, 50–100 ms, plus lent sous charge) est
+    // faite UNE fois avant la barrière — sinon les 16 fils partent ensemble en
+    // cache-miss et chacun lance son propre `tasklist`, rafale d'autant plus lente que
+    // la suite est chargée. La sémantique testée ne change pas : la course reste
+    // décidée par la reprise d'un bail au détenteur mort.
+    assert!(!crate::process::pid_alive(u32::MAX), "PID fantôme jugé vivant");
     assert_eq!(race(&ws), 1);
     let _ = std::fs::remove_dir_all(&ws);
 }

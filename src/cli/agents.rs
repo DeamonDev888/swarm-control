@@ -76,7 +76,7 @@ mod tests {
 
     fn agent() -> AgentInfo {
         AgentInfo {
-            name: "sniper".into(),
+            name: "discord".into(),
             runner: Runner::Claude,
             model: String::new(),
             mcp_servers: vec!["memory".into(), "db".into()],
@@ -87,8 +87,8 @@ mod tests {
 
     fn peer(alive: bool) -> Peer {
         Peer {
-            name: "swarm-sniper".into(),
-            agent: "sniper".into(),
+            name: "swarm-discord".into(),
+            agent: "discord".into(),
             url: "http://127.0.0.1:23082/mcp".into(),
             pid: 4242,
             alive,
@@ -112,6 +112,6 @@ mod tests {
     #[test]
     fn the_row_shows_every_column() {
         let row = cells(&agent(), None);
-        assert_eq!(row, ["sniper", "claude", "-", "2", "non", "-"]);
+        assert_eq!(row, ["discord", "claude", "-", "2", "non", "-"]);
     }
 }
