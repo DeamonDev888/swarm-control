@@ -17,78 +17,18 @@
 **Des agents IA qui se souviennent, tournent en continu et se parlent entre eux.**
 Un seul exécutable d'environ 3 Mio, rien d'autre à installer — propulsé par [LiteMCP](https://github.com/DeamonDev888/litemcp).
 
-[Installer](#1-installer) · [Les agents](#les-agents) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-10-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
+[Installer](#1-installer) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-10-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
 
 </div>
 
 ---
 
-## C'est quoi ?
-
-Quand vous lancez `claude -p "…"` ou `hermes chat`, l'IA **oublie tout** dès que la commande se termine.
-`swarm-control` transforme ces outils en **agents** :
-
-| | Sans swarm-control | Avec swarm-control |
-|---|---|---|
-| Mémoire | perdue à chaque appel | l'agent **reprend sa conversation** à chaque fois |
-| Plusieurs IA | à lancer à la main, une par une | jusqu'à **10 agents en parallèle**, suivis et arrêtables |
-| Toujours en ligne | non | un agent peut rester **résident 24/7** (Discord, WhatsApp, X, Google…) |
-| Piloter depuis une IA | non | Claude Code peut **créer et commander** d'autres agents |
-
-Il fonctionne avec les outils d'IA en ligne de commande que vous avez déjà :
-**Claude Code** (`claude`), **Hermes** (`hermes`) et **Antigravity** (`agy`).
+Runners pris en charge : **Claude Code** (`claude`), **Hermes** (`hermes`) et **Antigravity** (`agy`).
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-live-strip.svg" alt="swarm-control — plusieurs agents qui travaillent en parallèle" width="740" />
-</div>
-
-## Les agents
-
-Deux familles, chacune avec son logo (le même que dans [MCP Control](https://github.com/DeamonDev888/mcp-control), onglet Swarm).
-
-### Agents persistants — toujours allumés
-
-Un agent persistant a **son propre exécutable** et garde sa conversation 24/7, d'un message à l'autre.
-Il reçoit les messages par son **pont HTTP** (`--bridge`) ou par ses **serveurs MCP**.
-
-| | Agent | Rôle |
-|:---:|---|---|
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-discord.svg" alt="Logo Discord" width="72" /> | **discord** | répond sur un serveur Discord : un routeur Discord lui transmet les messages par le pont HTTP, il répond par le pont ou poste lui-même via son serveur MCP Discord |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-whatsapp.svg" alt="Logo WhatsApp" width="72" /> | **whatsapp** | même principe, derrière une passerelle WhatsApp |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-x.svg" alt="Logo X" width="72" /> | **x** | surveille et répond sur X (mentions, messages) via un serveur MCP X |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-google.svg" alt="Logo Google" width="72" /> | **google** | Gmail et Calendar : trie les mails, prépare les brouillons, tient l'agenda, via un serveur MCP Google |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-trading.svg" alt="Logo Trading" width="72" /> | **trading** | TradingView et marchés : suit les graphiques, analyse les signaux et déclenche alertes ou ordres via pont CLI / MCP |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-custom.svg" alt="Logo Custom" width="72" /> | **custom** | n'importe quel canal : branchez un pont CLI ou un serveur MCP (Telegram, Slack, Matrix, webhooks, outils internes…) |
-
-<div align="center">
+  <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-live-strip.svg" alt="swarm-control — agents de l'essaim : coordinator, coder, explorer, browser, monitor, verifier" width="740" />
   <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/pixel/swarm-persistent-bridges.svg" alt="swarm-control — agents persistants Discord, WhatsApp, X, Google, Trading et Custom" width="740" />
 </div>
-
-### Agents de l'essaim — lancés pour une tâche
-
-Ils travaillent **en parallèle** (`run_agents_parallel`, jusqu'à 10) : un tour sans rien garder, ou un agent nommé le temps d'un chantier.
-
-| | Agent | Rôle |
-|:---:|---|---|
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-coordinator.svg" alt="Logo Coordinator" width="72" /> | **coordinator** | découpe une tâche et la répartit entre les autres agents |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-coder.svg" alt="Logo Coder" width="72" /> | **coder** | écrit et modifie du code |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-explorer.svg" alt="Logo Explorer" width="72" /> | **explorer** | cherche et résume (code, web, documentation), sans rien modifier |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-browser.svg" alt="Logo Browser" width="72" /> | **browser** | navigue, lit et remplit des pages web via un serveur MCP navigateur |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-monitor.svg" alt="Logo Monitor" width="72" /> | **monitor** | surveille des journaux, des URL, des métriques, et alerte |
-| <img src="https://raw.githubusercontent.com/DeamonDev888/swarm-control/main/assets/classes/hornet-pixel-verifier.svg" alt="Logo Verifier" width="72" /> | **verifier** | relit le travail d'un autre agent et tranche : validé ou à reprendre |
-
-> Chacun se crée avec `create_agent` (nom, runner, personnalité, serveurs MCP).
-
-### Les mots à connaître
-
-| Mot | En clair |
-|---|---|
-| **Agent** | Une IA avec un nom (`architecte`, `discord`…), une personnalité (son *prompt*) et une mémoire. |
-| **Runner** | Le programme d'IA qui fait réellement le travail : `claude`, `hermes` ou `agy`. |
-| **Session** | La conversation de l'agent, sauvegardée sur disque et reprise à chaque appel. |
-| **Agent résident** | Un agent qui reste allumé et répond aux demandes au fil de l'eau, comme un bot. |
-| **MCP** | Le protocole standard qui permet à une IA (Claude Code, Cursor…) d'utiliser des outils. `swarm-control` est un serveur MCP, construit sur [LiteMCP](https://github.com/DeamonDev888/litemcp). |
-| **Workspace** | Le dossier où tout est rangé (agents, sessions, journaux). Par défaut : `~/.swarm-control`. |
 
 ---
 
