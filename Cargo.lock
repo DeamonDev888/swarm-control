@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "swarm-control"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "litemcp",
  "ratatui",

@@ -7,6 +7,10 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-28
+
+Version à **ruptures** : lire « Modifié » et « Retiré » avant de mettre à jour.
+
 ### Ajouté
 
 - **Modèles d'agents** intégrés (`assets/templates/`) : `create_agent {template}` pour les 11

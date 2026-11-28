@@ -1,42 +1,23 @@
 # TODO — swarm-control
 
-*État vérifié le 2026-11-27 sur l'arbre de travail (Windows 11, Rust 1.99.1). Mêmes numéros de
-section que [PLAN.md](PLAN.md). Légende : `[x]` fait et vérifié ; `[ ]` reste à faire. Une case
-cochée décrit **l'arbre**, pas forcément le commit.*
+*État vérifié le 2026-11-28 sur le commit de la 0.2.0. Mêmes numéros de section que
+[PLAN.md](PLAN.md). Légende : `[x]` fait et vérifié ; `[ ]` reste à faire.*
 
-## 0. Vérification et périmètre du commit
+## 0. Vérification
 
 | Contrôle | Résultat |
 |---|---|
 | `cargo fmt --check` | ✅ |
-| `cargo check --all-targets` | ✅ |
-| `cargo clippy --all-targets` | ✅ y compris avec `-D warnings` (lints réglés) |
-| `cargo test --lib` | ✅ 526 réussis, 0 échec, 1 ignoré |
-| `cargo test --test e2e` | ✅ 79 réussis, 0 échec |
+| `cargo clippy --all-targets --all-features -- -D warnings` | ✅ |
+| `cargo test --all-features` | ✅ 558 tests de lib + 81 e2e, 0 échec (3 `#[ignore]` : vraie compilation) |
+| `cargo deny check` | ✅ (`paste` ignoré, RUSTSEC-2024-0436) |
+| `cargo build --release --no-default-features` | ✅ |
 
-**Couverture des audits** : trois vérifications déléguées ont été rendues utilisables et
-recoupées avec le code — §4.8 (compilation, 12 points), §4.7 (outils et sémantique de `kill`),
-§4.1-4.6 + K1-K10 + §5 (optimisations). Aucun périmètre délégué n'est resté non couvert. Une
-conclusion d'audit a été corrigée après vérification directe : K10 restait partiel (deux docs
-annoncent encore la lecture de `agents.json`), et il est coché ainsi ci-dessous.
-
-**Commit à trois fichiers** (effectué dans ce commit) :
-
-- [x] `src/cli/exe.rs` — `renamed`, `migration_error`, `MIGRATION`. `agent_name` reste un alias de
-      compatibilité : le `cli/mod.rs` de `HEAD` l'appelle encore.
-- [x] `docs/PLAN.md` — §2 vérifié, état par section, K1-K11.
-- [x] `docs/TODO.md` — ce fichier.
-
-**Ce que ce commit ne fait pas** : `src/cli/mod.rs` n'en fait pas partie. À `HEAD`, `cli::run()`
-appelle encore `exe::agent_name` et sert donc un binaire renommé ; le refus 0.2.0 (code 2) n'entre
-en vigueur qu'avec le commit de `cli/mod.rs`.
-
-- [ ] Committer `src/cli/mod.rs` (avec `src/cli/agent.rs` et `src/lib.rs`) pour rendre le refus
-      effectif et retirer l'alias `agent_name`.
-- [x] `main` locale est derrière `origin/main` de 5 commits (README, visuels) et l'arbre modifie  (résolu : `origin/main` fusionné dans la branche)
-      les mêmes fichiers : fast-forward/merge à traiter avant le commit (K11).
-- [ ] L'arbre porte ~100 fichiers modifiés ou non suivis (§4.1-4.8) : découper les commits par
-      sujet, ne pas tout mettre dans celui-ci.
+**La 0.2.0 livre** : modèles et classes (§4.1), mémoire native, essaim (archétypes, `verify`),
+dialectes du pont, tâches planifiées, compilation native, retrait d'OverMind (K9), refus des
+binaires renommés. **Elle ne livre pas** (restent ouverts ci-dessous) : le regroupement des outils
+11 → 7 (§4.7), le runner générique JSON (§4.5), le panneau mémoire de la TUI, le branchement du
+garde-fou de publication x/google, la migration Discord du serveur (§6).
 
 ## 2. État vérifié
 
@@ -61,11 +42,12 @@ la CI n'est pas revérifiée.
 
 ### Reste
 
-- [ ] README : tableau modèles → classe → logo → `create_agent {template}`, et remplacer
-      « Les 10 outils MCP » par 11 (le README ne mentionne ni `template` ni `list_templates`).
+- [x] README : « Les 11 outils MCP », `template` et `list_templates` documentés. Le tableau
+      modèles → logo a été **retiré volontairement** du README (trop bavard) ; les logos vivent dans
+      `assets/classes/` et MCP Control.
 - [ ] MCP Control (dépôt à part) : lire `class` dans `status` / `list_agents` en priorité ; la
       regex sur le nom ne sert plus que de repli.
-- [ ] `RESIDENT-AGENTS.md` : documenter `class`, `template` et les 11 modèles.
+- [x] `RESIDENT-AGENTS.md` : documenter `class` (fait, section « Classe et modèles »), `template` et les 11 modèles.
 
 ## 4.2 Agents persistants
 
@@ -231,7 +213,7 @@ la CI n'est pas revérifiée.
       `sessions/legacy.rs`, `OVERMIND_AGENT_NAME`) ; dialecte renommé « Discord ».
 - [ ] **K7** Règle GitHub sur les tags `v*` (création réservée, ni déplacement ni suppression) —
       aucune preuve locale, à poser dans les réglages du dépôt.
-- [ ] **K10** Deux docs annoncent encore la lecture de `bridge/agents.json` :
+- [x] **K10** (fait : ARCHITECTURE et RESIDENT-AGENTS disent « non lu ») Deux docs annoncent encore la lecture de `bridge/agents.json` :
       `docs/ARCHITECTURE.md` (l. 89) et `docs/RESIDENT-AGENTS.md` (l. 72). Retirer ces phrases.
 - [x] **K11** `main` locale en retard de 5 commits sur `origin/main` (README, visuels) ; l'arbre
       modifie les mêmes fichiers. Fast-forward/merge avant le commit, sans écraser les visuels
@@ -261,9 +243,9 @@ la CI n'est pas revérifiée.
       les lit encore) ; manquent `owners/` et `history/*.jsonl`.
 - [ ] `docs/TODO-TESTS.md` §3 : tests fonctionnels listés (sessions, résidents, pont, CLI, TUI,
       sécurité).
-- [ ] CI : `cargo clippy -- -D warnings` (19 avertissements de code mort aujourd'hui) et
+- [x] CI : `cargo clippy -- -D warnings` (clippy et deny verts au 2026-11-28) (19 avertissements de code mort aujourd'hui) et
       `cargo deny check`.
-- [ ] Réactualiser l'en-tête de `docs/TODO-TESTS.md` : il annonce encore que « l'arbre ne compile
+- [x] Réactualiser l'en-tête de `docs/TODO-TESTS.md` : il annonce encore que « l'arbre ne compile
       pas » alors que la suite est verte ; le reste du plan de tests reste valable.
 - [ ] Job nocturne 3 OS × 3 passages, couverture (`cargo llvm-cov`), MSRV 1.85,
       `--no-default-features`.
@@ -277,8 +259,10 @@ la CI n'est pas revérifiée.
 - [ ] Garde-fou de publication x/google : branché (voir §4.2), pas seulement l'API.
 - [ ] Logo docs.rs figé sur le tag de la version (réglage docs.rs).
 - [ ] Homebrew / Scoop si la demande existe.
-- [ ] **0.2.0** : `Cargo.toml` en 0.2.0, note de migration au CHANGELOG (binaire compilé, outils
-      regroupés, OverMind retiré), publication crates.io, binaires 5 cibles, page crates.io à jour.
+- [x] **0.2.0** : `Cargo.toml` en 0.2.0, note de migration au CHANGELOG (binaire compilé, OverMind
+      retiré ; les outils regroupés sont reportés), publication crates.io et binaires par le workflow
+      de release (tag `v0.2.0`).
+- [ ] **0.3.0** : outils regroupés 11 → 7 (§4.7), runner générique (§4.5), panneau mémoire TUI.
 
 ## 6. Agent Discord — serveur 192.168.40.9
 

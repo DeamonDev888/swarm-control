@@ -284,7 +284,7 @@ agent_start(name:"alice")
 ```
 
 Son serveur expose : `ask` (poser une question), `status`, `stop`, ainsi que `history`, `logs`, `config` et `session`
-pour l'inspecter, et `memory_store` / `memory_search` / `memory_forget` pour sa mémoire (voir « Mémoire native »).
+pour l'inspecter, `reload` pour relire son `.env`, et `memory_store` / `memory_search` / `memory_forget` pour sa mémoire (voir « Mémoire native »).
 
 Bon à savoir :
 
@@ -420,7 +420,7 @@ Toujours bloqué ? `swarm-control --debug …` affiche tout ce qui se passe, et 
 
 ```toml
 [dependencies]
-swarm-control = { version = "0.1", default-features = false }   # sans l'interface terminal
+swarm-control = { version = "0.2", default-features = false }   # sans l'interface terminal
 ```
 
 ```rust

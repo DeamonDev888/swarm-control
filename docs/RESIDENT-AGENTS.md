@@ -39,6 +39,15 @@ jetable qui porte la persona d'un modèle — ni nom, ni mémoire, ni session ga
 archétype pour une tâche ponctuelle, un agent nommé dès qu'il faut se souvenir, tourner en
 continu ou être joint par un pair.
 
+## Classe et modèles
+
+Chaque agent a une **classe** (`discord`, `whatsapp`, `x`, `google`, `custom`, `coder`, `browser`,
+`explorer`, `coordinator`, `monitor`, `verifier`) : c'est elle qui choisit son logo dans
+MCP Control, plus aucune devinette sur le nom. Elle est publiée par l'outil `status` du résident, par
+`/status` du pont et par `list_agents`. `create_agent {template:"discord"}` crée un agent à partir
+d'un des 11 modèles intégrés (persona, classe, serveurs MCP attendus) ; `list_templates` ou
+`swarm-control templates` les listent, et `<workspace>/templates/<nom>.json` en surcharge un.
+
 ## 2. Ce qui vit en mémoire, par agent résident
 
 ```rust
