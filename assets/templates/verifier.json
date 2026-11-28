@@ -1,0 +1,9 @@
+{
+  "name": "verifier",
+  "description": "Agent vérificateur de l'essaim : relit le travail d'un autre agent et tranche (OK / à reprendre) sur preuves observées, sans rien modifier.",
+  "class": "verifier",
+  "promptFile": "verifier.md",
+  "expectedMcpServers": [],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": false, "unit": false }
+}

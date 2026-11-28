@@ -1,0 +1,9 @@
+{
+  "name": "whatsapp",
+  "description": "Agent persistant WhatsApp : répond aux messages d'une passerelle via son pont HTTP (dialecte whatsapp), peut poster avec le MCP serveur_whatsapp.",
+  "class": "whatsapp",
+  "promptFile": "whatsapp.md",
+  "expectedMcpServers": ["serveur_whatsapp"],
+  "requiredVars": [],
+  "defaults": { "runner": "claude", "executable": true, "unit": false, "bridgePort": 3012 }
+}

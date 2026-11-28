@@ -1,0 +1,9 @@
+{
+  "name": "x",
+  "description": "Agent persistant X : surveille mentions et messages directs par sondage planifié via le MCP serveur_x ; publication en brouillon par défaut.",
+  "class": "x",
+  "promptFile": "x.md",
+  "expectedMcpServers": ["serveur_x"],
+  "requiredVars": ["X_API_TOKEN"],
+  "defaults": { "runner": "claude", "executable": true, "unit": false }
+}
