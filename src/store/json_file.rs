@@ -111,13 +111,15 @@ mod tests {
         std::fs::create_dir_all(blocked.join("interne")).unwrap();
         let err = write_json_atomic(&blocked, &json!({ "x": 1 })).unwrap_err();
         // L'erreur est remontée, pas avalée.
-        // Sous Windows, renommer un fichier sur un dossier non vide rend `PermissionDenied`.
+        // Windows rend `PermissionDenied` ; Linux `IsADirectory` ou `DirectoryNotEmpty`.
         assert!(
             matches!(
                 err.kind(),
                 std::io::ErrorKind::AlreadyExists
                     | std::io::ErrorKind::Other
                     | std::io::ErrorKind::PermissionDenied
+                    | std::io::ErrorKind::IsADirectory
+                    | std::io::ErrorKind::DirectoryNotEmpty
             ),
             "{err:?}"
         );

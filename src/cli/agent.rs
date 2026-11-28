@@ -127,7 +127,6 @@ fn open_tui(_ctx: Arc<Ctx>, _debug: bool) -> Result<(), String> {
 mod tests {
     use super::{Options, boot, schedule_of};
     use crate::cli::exe::renamed;
-    use std::ffi::OsStr;
     use std::time::Duration;
     fn une_option(agent: Option<&str>) -> Options {
         Options { agent: agent.map(String::from), ..Options::default() }
@@ -201,7 +200,10 @@ mod tests {
         // Contrat amont de `boot` (résolu dans cli::run_with) : un exécutable renommé
         // (`discord.exe`) désigne l'agent ; `swarm-control` reste l'instance d'admin, et
         // `--agent`, déjà présent dans Options, garde la priorité sur ce défaut.
-        assert_eq!(renamed(OsStr::new(r"C:\agents\discord.exe")).as_deref(), Some("discord"));
-        assert_eq!(renamed(OsStr::new(r"C:\bin\swarm-control.exe")), None);
+        // Chemins construits avec le séparateur de la plateforme (pas de `\` sous Unix).
+        let agent = std::path::Path::new("agents").join("discord.exe");
+        let admin = std::path::Path::new("bin").join("swarm-control.exe");
+        assert_eq!(renamed(agent.as_os_str()).as_deref(), Some("discord"));
+        assert_eq!(renamed(admin.as_os_str()), None);
     }
 }
