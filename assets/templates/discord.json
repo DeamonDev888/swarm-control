@@ -1,0 +1,9 @@
+{
+  "name": "discord",
+  "description": "Agent persistant Discord : répond aux messages du serveur via son pont HTTP, peut poster directement avec le MCP serveur_discord.",
+  "class": "discord",
+  "promptFile": "discord.md",
+  "expectedMcpServers": ["serveur_discord"],
+  "requiredVars": ["DISCORD_BOT_TOKEN"],
+  "defaults": { "runner": "claude", "executable": true, "unit": false, "bridgePort": 3011 }
+}
