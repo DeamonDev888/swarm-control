@@ -173,6 +173,23 @@
     @keyframes shade-glint { 0%, 60% { transform: translateX(-24px); opacity: 0; } 72% { opacity: 0.95; } 90%, 100% { transform: translateX(28px); opacity: 0; } }
     @keyframes idea-spark { 0%, 42%, 85%, 100% { transform: scale(0.3) rotate(0deg); opacity: 0; } 55%, 72% { transform: scale(1.15) rotate(22deg); opacity: 1; } }
     @keyframes brow-raise { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-2.2px); } }
+    @keyframes stealth-cloak {
+      0%, 62%, 88%, 100% { opacity: 1; }
+      65% { opacity: 0.42; }
+      68% { opacity: 0.88; }
+      72%, 80% { opacity: 0.15; }
+      83% { opacity: 0.52; }
+    }
+    @keyframes stealth-sweep {
+      0%, 61%, 89%, 100% { transform: translateY(-58px); opacity: 0; }
+      65% { transform: translateY(-48px); opacity: 0.95; }
+      76% { transform: translateY(62px); opacity: 0.85; }
+      85% { transform: translateY(-44px); opacity: 0.9; }
+    }
+    @keyframes stealth-ring {
+      0%, 62%, 88%, 100% { opacity: 0; transform: scale(0.92); }
+      70%, 81% { opacity: 0.65; transform: scale(1.04); }
+    }
 
     .rig-type-bob { animation: type-bob 1.6s ease-in-out infinite; }
     .rig-scout-tilt { animation: scout-tilt 2.9s ease-in-out infinite; transform-origin: 150px 160px; }
@@ -195,12 +212,16 @@
     .m-glint { animation: shade-glint 3.2s ease-in-out infinite; }
     .m-idea { animation: idea-spark 2.8s ease-out infinite; }
     .m-brow { animation: brow-raise 3.2s ease-in-out infinite; }
+    .browser-cloak { animation: stealth-cloak 5.2s ease-in-out infinite; }
+    .stealth-scan { animation: stealth-sweep 5.2s ease-in-out infinite; }
+    .stealth-halo { animation: stealth-ring 5.2s ease-in-out infinite; }
 
     @media (prefers-reduced-motion: reduce) {
       .rig-type-bob, .rig-scout-tilt, .rig-inspect-tilt, .rig-click-bounce,
       .rig-sentinel-watch, .rig-vibe-bob, .rig-friendly-float, .rig-cool-glide,
       .rig-tinker-float, .m-dart, .m-scan, .m-blink, .m-wink-open, .m-wink-shut,
-      .m-happy-open, .m-happy-shut, .m-cylon, .m-glint, .m-idea, .m-brow { animation: none; }
+      .m-happy-open, .m-happy-shut, .m-cylon, .m-glint, .m-idea, .m-brow,
+      .browser-cloak, .stealth-scan, .stealth-halo { animation: none; }
     }
     @keyframes bridge-flow { from { stroke-dashoffset: 64; } to { stroke-dashoffset: 0; } }
     @keyframes floor-breathe { 0%, 100% { transform: scaleX(1); opacity: 0.22; } 50% { transform: scaleX(0.84); opacity: 0.44; } }
@@ -1810,21 +1831,7 @@
             <path fill="#3D69E8" d="M115 216h1v1h-1z"/>
             <path fill="#2E9DB4" d="M120 218h1v1h-1z"/>
           </g>
-          <g transform="scale(0.8)" shape-rendering="geometricPrecision">
-      <g transform="translate(120, 120) rotate(-14)">
-        <path d="M-20,2 Q0,-6 22,2" fill="none" stroke="#9A3412" stroke-width="3.2" stroke-linecap="round"/>
-        <circle cx="-11" cy="1" r="7.5" fill="#083344" stroke="#FB923C" stroke-width="2.4"/>
-        <circle cx="-11" cy="1" r="4.2" fill="#22D3EE" fill-opacity="0.75"/>
-        <circle cx="11" cy="1" r="8.2" fill="#083344" stroke="#FB923C" stroke-width="2.4"/>
-        <circle cx="11" cy="1" r="4.8" fill="#67E8F9" fill-opacity="0.8"/>
-        <line x1="-3.5" y1="1" x2="2.8" y2="1" stroke="#FDBA74" stroke-width="2.4"/>
-      </g>
-      <g transform="translate(102, 102)">
-        <g class="m-idea">
-          <path d="M0,-9 L2.2,-2.2 L9,0 L2.2,2.2 L0,9 L-2.2,2.2 L-9,0 L-2.2,-2.2 Z" fill="#FEF08A" stroke="#F97316" stroke-width="0.9"/>
-        </g>
-      </g>
-    </g>
+      
           <g transform="scale(0.8)" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
       <g transform="translate(68, 208)">
         <g class="fx-radar-spin">
