@@ -14,6 +14,10 @@
 //!
 //! Rien d'autre n'est gardé en RAM : la conversation reste dans la session du CLI
 //! (`--resume`), relancé une fois par tour.
+//!
+//! Une **tâche planifiée** ([`Schedule`], PLAN §4.4) peut tourner à côté : celle de la ligne de
+//! commande (`--every`, passée à [`start`] / [`start_on`]) prime sur le `schedule` de la
+//! définition de l'agent ; ses tours vont dans la même file, marqués `from: "schedule"`.
 
 mod activity;
 mod bridge;
@@ -38,6 +42,7 @@ pub use bridge::Dialect;
 pub use bridge::open as open_bridge;
 pub(crate) use bridge::request_dialect;
 pub use ctx::Ctx;
+pub use schedule::Schedule;
 pub use start::{start, start_on};
 pub use stop::stop;
 

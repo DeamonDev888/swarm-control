@@ -1,2 +1,2 @@
-resident: agent, class, current, instance, lastTurn, name, queueLength, runner, session, state, turnsDone, url
-bridge: agent, class, current, instance, lastTurn, name, queueLength, runner, session, state, turnsDone, url
+resident: agent, class, current, instance, lastTurn, name, queueLength, rebuildNeeded, runner, session, state, turnsDone, url
+bridge: agent, class, current, instance, lastTurn, name, queueLength, rebuildNeeded, runner, session, state, turnsDone, url

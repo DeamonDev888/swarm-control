@@ -7,7 +7,7 @@ use std::process::Command;
 pub fn build(req: &RunRequest, args: &[String]) -> Command {
     let mut cmd = process::command(&binaries::hermes_binary());
     cmd.args(args).current_dir(req.working_dir());
-    for (k, v) in &config::get().dotenv {
+    for (k, v) in &config::get().dotenv() {
         cmd.env(k, v);
     }
     let agent = req.agent.as_deref().unwrap_or("");

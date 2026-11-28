@@ -1,7 +1,10 @@
 //! État d'un agent résident, au format JSON de l'outil `status` (et du pont `/status`).
+//!
+//! `rebuildNeeded` (PLAN §4.8) : `null` tant que l'agent n'a jamais été compilé, sinon vrai
+//! quand son binaire dédié n'est pas à la version de cette instance.
 
 use super::ctx::Ctx;
-use crate::agents::class_of;
+use crate::agents::{class_of, compile};
 use crate::sessions;
 use serde_json::{Value, json};
 use std::sync::atomic::Ordering;
@@ -17,6 +20,7 @@ impl Ctx {
             "name": self.name(),
             "url": self.url(),
             "instance": self.instance,
+            "rebuildNeeded": compile::rebuild_needed_value(&self.workspace, &self.agent),
             "state": if current.is_some() { "busy" } else { "idle" },
             "queueLength": self.inbox.len(),
             "current": current.as_ref().map(|c| json!({
@@ -75,6 +79,19 @@ mod tests {
         definition(&ctx);
         stamp(&ctx.workspace, &ctx.agent, Runner::Claude, "discord", Some("discord")).unwrap();
         assert_eq!(ctx.status_json()["class"], json!("discord"));
+        let _ = std::fs::remove_dir_all(&ctx.workspace);
+    }
+
+    /// `rebuildNeeded` : `null` tant que rien n'a été compilé pour l'agent, puis un booléen
+    /// (`true` pour un faux binaire texte, qui ne répond pas à `--version`).
+    #[test]
+    fn le_status_publie_rebuild_needed_seulement_pour_un_agent_deja_compile() {
+        let ctx = ctx("rebuild");
+        assert_eq!(ctx.status_json()["rebuildNeeded"], Value::Null, "jamais compilé : null");
+        let bin = crate::agents::executable::path(&ctx.workspace, &ctx.agent);
+        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        std::fs::write(&bin, "faux binaire").unwrap();
+        assert_eq!(ctx.status_json()["rebuildNeeded"], json!(true));
         let _ = std::fs::remove_dir_all(&ctx.workspace);
     }
 }

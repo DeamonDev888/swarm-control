@@ -37,7 +37,7 @@ pub fn run(
 fn command(req: &RunRequest, plan: &Plan) -> Command {
     let mut cmd = process::command(&binaries::antigravity_binary());
     cmd.args(&plan.args).current_dir(&plan.cwd);
-    for (k, v) in &config::get().dotenv {
+    for (k, v) in &config::get().dotenv() {
         cmd.env(k, v);
     }
     for (k, v) in &plan.env {

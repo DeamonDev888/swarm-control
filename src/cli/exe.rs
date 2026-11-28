@@ -35,14 +35,6 @@ pub fn migration_error(renamed_stem: &str) -> String {
     format!("exécutable « {renamed_stem} » : {MIGRATION}")
 }
 
-/// Alias de compatibilité 0.1.x de [`renamed`], encore appelé par `cli/mod.rs` tant que le refus
-/// 0.2.0 n'est pas commité avec ce fichier : le nom rendu ne désigne **plus** un agent à servir.
-/// À retirer avec le call site.
-#[allow(dead_code)]
-pub fn agent_name(argv0: &OsStr) -> Option<String> {
-    renamed(argv0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{MIGRATION, migration_error, renamed};

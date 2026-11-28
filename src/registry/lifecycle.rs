@@ -21,6 +21,12 @@ impl LiveRun {
         });
     }
 
+    /// Comme [`set_pid`](Self::set_pid), sans rien écrire sur disque : pour les runs de
+    /// service (compilation d'agent), qui ne décrivent pas un tour de l'agent.
+    pub fn set_pid_quiet(&self, pid: u32) {
+        self.state().pid = Some(pid);
+    }
+
     pub fn set_session(&self, session_id: &str) {
         self.state().session_id = Some(session_id.to_string());
     }
@@ -39,6 +45,16 @@ impl LiveRun {
             run["lastOutputAt"] = json!(now_ms());
         });
         self.release_lease();
+    }
+
+    /// Comme [`finish`](Self::finish), sans rien écrire sur disque : la fin d'un run de
+    /// service (compilation d'agent) ne doit pas devenir le `lastRun` de l'agent.
+    pub fn finish_quiet(&self, status: Status, exit_code: Option<i32>, outcome: Outcome) {
+        let mut s = self.state();
+        s.status = status;
+        s.exit_code = exit_code;
+        s.finished_at = Some(now_ms());
+        s.outcome = Some(outcome);
     }
 
     /// Modifie `lastRun` dans le fichier d'état de l'agent.

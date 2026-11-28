@@ -1,9 +1,14 @@
 //! Le fil de travail d'un agent résident : un tour à la fois, dans l'ordre d'arrivée.
 //!
-//! Au démarrage, il lance aussi le planificateur des tâches planifiées (`schedule.rs`)
-//! lues dans la définition de l'agent : leurs tours arrivent dans la même file.
+//! Au démarrage, il lance aussi le planificateur des tâches planifiées (`schedule.rs`) : la
+//! tâche de la ligne de commande (`--every`) et, à défaut, celle de la définition de l'agent ;
+//! leurs tours arrivent dans la même file.
+//!
+//! Au début de chaque tour, les `.env` du workspace sont relus s'ils ont changé (PLAN §4.8) :
+//! les variables du tour sont celles du moment, pas celles du démarrage.
 
 use super::ctx::Ctx;
+use super::schedule::Schedule;
 use super::turn::Turn;
 use super::{schedule, waiting};
 use crate::history;
@@ -17,11 +22,13 @@ use std::time::{Duration, Instant};
 const HEARTBEAT: Duration = Duration::from_secs(30);
 
 /// Boucle du fil de travail. Détient le bail d'hébergement : il est libéré à la sortie.
-pub fn run(ctx: Arc<Ctx>, lease: Lease) {
+/// `cli` : la tâche planifiée de la ligne de commande (`--every`), qui prime sur celle de la
+/// définition de l'agent.
+pub fn run(ctx: Arc<Ctx>, lease: Lease, cli: Option<Schedule>) {
     // Tâche planifiée (PLAN §4.4) : un fil à part qui dépose ses tours dans la même file.
     // Il sonde `stopping` pendant chaque attente ; sa fin est attendue avant de rendre le
     // bail, pour qu'aucun tour ne soit déposé après l'arrêt.
-    let scheduler = start_scheduler(&ctx);
+    let scheduler = start_scheduler(&ctx, cli);
     while !ctx.stopping() {
         if let Some(turn) = ctx.inbox.pop(HEARTBEAT) {
             run_turn(&ctx, turn);
@@ -35,10 +42,11 @@ pub fn run(ctx: Arc<Ctx>, lease: Lease) {
     }
 }
 
-/// Lance le planificateur si la définition de l'agent porte un `schedule` ; `None` sinon
-/// (ou schedule illisible : signalé au journal de diagnostic, l'agent démarre quand même).
-fn start_scheduler(ctx: &Arc<Ctx>) -> Option<std::thread::JoinHandle<()>> {
-    let task = schedule::from_definition(&ctx.workspace, ctx.runner, &ctx.agent)?;
+/// Lance le planificateur : la tâche de la ligne de commande (`--every`) prime sur celle de
+/// la définition de l'agent ; `None` sans tâche (ou schedule illisible : signalé au journal
+/// de diagnostic, l'agent démarre quand même).
+fn start_scheduler(ctx: &Arc<Ctx>, cli: Option<Schedule>) -> Option<std::thread::JoinHandle<()>> {
+    let task = scheduled_task(cli, ctx)?;
     match schedule::spawn(Arc::clone(ctx), task) {
         Ok(handle) => Some(handle),
         Err(e) => {
@@ -48,7 +56,16 @@ fn start_scheduler(ctx: &Arc<Ctx>) -> Option<std::thread::JoinHandle<()>> {
     }
 }
 
+/// La tâche qui tourne : celle de la ligne de commande, sinon celle de la définition (PLAN
+/// §4.4 : `--every 5m "<prompt>"` prime sur le `schedule` de la définition).
+fn scheduled_task(cli: Option<Schedule>, ctx: &Ctx) -> Option<Schedule> {
+    cli.or_else(|| schedule::from_definition(&ctx.workspace, ctx.runner, &ctx.agent))
+}
+
 fn run_turn(ctx: &Ctx, turn: Turn) {
+    // Les `.env` du workspace ont pu changer depuis le tour précédent (PLAN §4.8) : la
+    // commande du runner est construite après, avec les variables du moment.
+    crate::config::reload_env();
     let queued_ms = turn.queued_ms();
     if turn.cancelled.load(Ordering::SeqCst) {
         let result = RunResult::err("CANCELLED: demande annulée.");
@@ -156,13 +173,56 @@ mod tests {
     #[test]
     fn un_schedule_de_la_definition_lance_le_planificateur() {
         let ctx = ctx("planifie");
-        assert!(start_scheduler(&ctx).is_none(), "sans définition : rien");
+        assert!(start_scheduler(&ctx, None).is_none(), "sans définition ni --every : rien");
         let path = crate::agents::claude_settings_path(&ctx.workspace, "alice");
         crate::store::write_json_atomic(&path, &serde_json::json!({ "schedule": "1s résume" }))
             .unwrap();
-        let scheduler = start_scheduler(&ctx).expect("planificateur lancé");
+        let scheduler = start_scheduler(&ctx, None).expect("planificateur lancé");
         let turn = ctx.inbox.pop(Duration::from_secs(5)).expect("tour planifié déposé");
         assert_eq!((turn.from.as_deref(), turn.prompt.as_str()), (Some("schedule"), "résume"));
+        let queued = turn.queued_ms();
+        turn.complete(RunResult::default(), queued, 0);
+        ctx.stopping.store(true, Ordering::SeqCst);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !scheduler.is_finished() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(scheduler.is_finished(), "le planificateur s'arrête avec l'agent");
+        scheduler.join().unwrap();
+        let _ = std::fs::remove_dir_all(&ctx.workspace);
+    }
+
+    /// Le `schedule` de la ligne de commande (`--every`) prime sur celui de la définition :
+    /// c'est son prompt qui tourne ; sans ligne de commande, la définition fait foi.
+    #[test]
+    fn le_schedule_de_la_ligne_de_commande_prime_sur_celui_de_la_definition() {
+        let ctx = ctx("priorite");
+        let path = crate::agents::claude_settings_path(&ctx.workspace, "alice");
+        crate::store::write_json_atomic(
+            &path,
+            &serde_json::json!({ "schedule": "1s résumé de la définition" }),
+        )
+        .unwrap();
+        let cli = Schedule {
+            every: Duration::from_millis(600),
+            prompt: "résumé de la ligne de commande".into(),
+            window: None,
+        };
+        // Choix pur : la ligne de commande d'abord, la définition à défaut.
+        assert_eq!(scheduled_task(Some(cli.clone()), &ctx), Some(cli.clone()));
+        let definition = scheduled_task(None, &ctx).expect("sans --every : la définition fait foi");
+        assert_eq!(
+            (definition.every, definition.prompt.as_str()),
+            (Duration::from_secs(1), "résumé de la définition")
+        );
+        // Sur le vrai fil : le tour déposé est celui de la ligne de commande (600 ms, son
+        // prompt) — pas celui de la définition (1 s, l'autre prompt).
+        let scheduler = start_scheduler(&ctx, Some(cli)).expect("planificateur lancé");
+        let turn = ctx.inbox.pop(Duration::from_secs(5)).expect("tour planifié déposé");
+        assert_eq!(
+            (turn.from.as_deref(), turn.prompt.as_str()),
+            (Some("schedule"), "résumé de la ligne de commande")
+        );
         let queued = turn.queued_ms();
         turn.complete(RunResult::default(), queued, 0);
         ctx.stopping.store(true, Ordering::SeqCst);

@@ -7,10 +7,13 @@
 //! restent sur disque, relus à chaque tour : aucun secret n'entre dans le binaire.
 //!
 //! - [`generate`] écrit `<ws>/agents/<agent>/build/` : `Cargo.toml`, `src/main.rs`,
-//!   `agent.json` (définition par défaut, sans secret) et `build.rs` ;
-//! - [`build`] lance `cargo build --release` au premier plan, [`spawn_build`] en arrière-plan
-//!   (dossier de compilation partagé `<ws>/build/target`, journal dans `<ws>/logs/`) ;
-//! - [`bin_version`], [`rebuild_needed`] et [`remove`] complètent le cycle de vie.
+//!   `agent.json` (définition par défaut, sans secret) et `build.rs` ; [`regenerate`] refait
+//!   la même écriture depuis l'`agent.json` existant, à la version de l'instance ;
+//! - [`build`] lance `cargo build --release` au premier plan (sans régénérer le crate),
+//!   [`spawn_build`] en arrière-plan (dossier de compilation partagé `<ws>/build/target`,
+//!   journal dans `<ws>/logs/`) ;
+//! - [`bin_version`], [`rebuild_needed`] (publié comme `rebuildNeeded` par `status`, via
+//!   [`rebuild_needed_value`]) et [`remove`] complètent le cycle de vie.
 //!
 //! Sans `cargo` ([`cargo_path`] rend `None`), la compilation échoue avec un message clair :
 //! il n'y a **pas de repli par copie** (décision 2).
@@ -19,6 +22,7 @@ use super::executable;
 use super::name::validate_name;
 use super::runner::Runner;
 use serde_json::{Map, Value};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -93,7 +97,86 @@ pub fn generate_with_path(
         &serde_json::to_string_pretty(&definition).map_err(|e| e.to_string())?,
     )?;
     write(&dir.join("build.rs"), BUILD_RS)?;
+    write_icon(&dir, definition["class"].as_str().unwrap_or("custom"))?;
     Ok(dir)
+}
+
+/// Pose l'icône Windows de la classe dans `<build>/resources/icon.ico` : c'est le fichier
+/// que `build.rs` du crate généré attend. Une classe sans icône retire la sienne (un
+/// changement de classe ne doit pas laisser l'ancienne icône dans le binaire).
+fn write_icon(dir: &Path, class: &str) -> Result<(), String> {
+    let resources = dir.join("resources");
+    let Some(icon) = class_icon(class) else {
+        let _ = std::fs::remove_file(resources.join("icon.ico"));
+        return Ok(());
+    };
+    std::fs::create_dir_all(&resources)
+        .map_err(|e| format!("Dossier '{}' impossible à créer : {e}", resources.display()))?;
+    std::fs::write(resources.join("icon.ico"), icon)
+        .map_err(|e| format!("icône de la classe '{class}' impossible à écrire : {e}"))
+}
+
+/// Icône Windows d'une classe (16, 32 et 48 px, PNG dans un `.ico`), embarquée dans le
+/// binaire : `build.rs` du crate généré la pose dans les ressources de l'exécutable.
+/// `None` : classe sans icône, binaire compilé sans ressource d'icône.
+pub fn class_icon(class: &str) -> Option<&'static [u8]> {
+    Some(match class {
+        "browser" => include_bytes!("../../assets/classes/icons/browser.ico"),
+        "coder" => include_bytes!("../../assets/classes/icons/coder.ico"),
+        "coordinator" => include_bytes!("../../assets/classes/icons/coordinator.ico"),
+        "custom" => include_bytes!("../../assets/classes/icons/custom.ico"),
+        "discord" => include_bytes!("../../assets/classes/icons/discord.ico"),
+        "explorer" => include_bytes!("../../assets/classes/icons/explorer.ico"),
+        "google" => include_bytes!("../../assets/classes/icons/google.ico"),
+        "monitor" => include_bytes!("../../assets/classes/icons/monitor.ico"),
+        "trading" => include_bytes!("../../assets/classes/icons/trading.ico"),
+        "verifier" => include_bytes!("../../assets/classes/icons/verifier.ico"),
+        "whatsapp" => include_bytes!("../../assets/classes/icons/whatsapp.ico"),
+        "x" => include_bytes!("../../assets/classes/icons/x.ico"),
+        _ => return None,
+    })
+}
+
+/// Régénère le crate d'un agent **déjà généré**, à la version de cette instance : relit
+/// `<ws>/agents/<agent>/build/agent.json`, en tire la classe et repasse par [`generate`]
+/// (`Cargo.toml`, `src/main.rs`, `agent.json`, `build.rs` réécrits, de façon idempotente).
+/// C'est le début de `swarm-control build <agent>` : nom, classe et version sont gravés dans
+/// le binaire, seuls un rebuild les prend en compte (PLAN §4.8).
+///
+/// Contrairement aux tests ([`generate_with_path`], dépendance par chemin), la dépendance
+/// `swarm-control` reste épinglée au registre. Erreur claire si `agent.json` manque (crate
+/// jamais généré) ou est illisible.
+pub fn regenerate(ws: &Path, agent: &str) -> Result<PathBuf, String> {
+    let file = build_dir(ws, agent).join("agent.json");
+    let text = match std::fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!(
+                "régénération de '{agent}' impossible : '{}' absent — le crate n'a jamais été \
+                 généré (recrée l'agent avec executable:true).",
+                file.display()
+            ));
+        }
+        Err(e) => return Err(format!("Lecture de '{}' impossible : {e}", file.display())),
+    };
+    let mut args: Value = serde_json::from_str(&text)
+        .map_err(|e| format!("'{}' illisible (JSON invalide) : {e}", file.display()))?;
+    let Some(doc) = args.as_object_mut() else {
+        return Err(format!("'{}' illisible : objet JSON attendu", file.display()));
+    };
+    let class = doc.get("class").and_then(Value::as_str).unwrap_or("custom").to_string();
+    // `agent.json` garde les serveurs MCP en tableau de noms ; `definition_of` ne lit qu'un
+    // objet (dont seules les clés sont conservées) : on lui rend cette forme pour n'en perdre
+    // aucun.
+    if let Some(names) = doc.get("mcpServers").and_then(Value::as_array).cloned() {
+        let servers: Map<String, Value> = names
+            .iter()
+            .filter_map(Value::as_str)
+            .map(|name| (name.to_string(), Value::Object(Map::new())))
+            .collect();
+        doc.insert("mcpServers".into(), Value::Object(servers));
+    }
+    generate(ws, agent, &class, env!("CARGO_PKG_VERSION"), &args)
 }
 
 /// Écrit un fichier en UTF-8, seulement si son contenu change (régénération idempotente :
@@ -301,7 +384,7 @@ fn cargo_in(path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
 /// Version de `cargo` (`cargo --version`, première ligne), pour `doctor`.
 ///
 /// Sans appelant pour l'instant : la ligne « compilation d'agents » de `doctor` (§4.8)
-/// est à venir.
+/// se contente du chemin de `cargo`.
 #[allow(dead_code)]
 pub fn cargo_version(cargo: &Path) -> Option<String> {
     let out = Command::new(cargo).arg("--version").output().ok()?;
@@ -330,11 +413,25 @@ pub struct BuildOutcome {
     pub elapsed_ms: u64,
 }
 
-/// Compile l'agent au premier plan : régénère le crate, lance
+/// Compile l'agent au premier plan : lance
 /// `cargo build --release --manifest-path <build>/Cargo.toml --target-dir <ws>/build/target`,
 /// journalise dans `<ws>/logs/build-<agent>.log`, puis copie le binaire vers
 /// `executable::path(ws, agent)`. Sans `cargo` : erreur claire avec le lien rustup.
+///
+/// Ne régénère pas le crate : c'est le rôle de [`regenerate`] (`swarm-control build`), pour
+/// que les tests puissent épingler une dépendance par chemin ([`generate_with_path`]).
 pub fn build(ws: &Path, agent: &str, opts: &BuildOptions) -> Result<BuildOutcome, String> {
+    build_tracked(ws, agent, opts, None)
+}
+
+/// Corps de [`build`] : `run` est le run de compilation suivi par `agent_control` (pid,
+/// arrêt demandé), `None` pour un appel direct.
+fn build_tracked(
+    ws: &Path,
+    agent: &str,
+    opts: &BuildOptions,
+    run: Option<&crate::registry::LiveRun>,
+) -> Result<BuildOutcome, String> {
     let started = std::time::Instant::now();
     let cargo = cargo_path().ok_or_else(no_cargo_message)?;
     let manifest = build_dir(ws, agent).join("Cargo.toml");
@@ -360,8 +457,7 @@ pub fn build(ws: &Path, agent: &str, opts: &BuildOptions) -> Result<BuildOutcome
     if opts.offline {
         cmd.arg("--offline");
     }
-    let output =
-        cmd.output().map_err(|e| format!("Lancement de '{}' impossible : {e}", cargo.display()))?;
+    let output = spawn_and_wait(&mut cmd, &cargo, run)?;
     let mut journal = String::new();
     journal.push_str(&format!("$ {} {}\n", cargo.display(), args_text(&cmd)));
     journal.push_str(&String::from_utf8_lossy(&output.stdout));
@@ -402,12 +498,70 @@ pub fn build(ws: &Path, agent: &str, opts: &BuildOptions) -> Result<BuildOutcome
 
 /// Lance la compilation en arrière-plan sur un fil nommé ; rend le chemin du journal.
 /// Les erreurs sont écrites dans le journal (et sur stderr), jamais levées.
-pub fn spawn_build(ws: &Path, agent: &str, opts: BuildOptions) -> Result<PathBuf, String> {
+/// Lance la commande avec ses deux tubes capturés, publie son pid sur le run et attend sa
+/// fin en surveillant un arrêt demandé (`agent_control kill`) : le process est tué, et le
+/// run termine en `killed`.
+fn spawn_and_wait(
+    cmd: &mut Command,
+    cargo: &Path,
+    run: Option<&crate::registry::LiveRun>,
+) -> Result<std::process::Output, String> {
+    use std::process::Stdio;
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child =
+        cmd.spawn().map_err(|e| format!("Lancement de '{}' impossible : {e}", cargo.display()))?;
+    if let Some(run) = run {
+        run.set_pid_quiet(child.id());
+    }
+    let stdout = spawn_reader(child.stdout.take());
+    let stderr = spawn_reader(child.stderr.take());
+    let status = loop {
+        if run.is_some_and(|run| run.kill_requested()) {
+            let _ = child.kill();
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+            Err(e) => return Err(format!("Attente de '{}' impossible : {e}", cargo.display())),
+        }
+    };
+    Ok(std::process::Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
+}
+
+/// Lit un tube jusqu'à sa fin sur son propre fil (un tube non lu bloquerait `cargo`).
+fn spawn_reader<R: Read + Send + 'static>(
+    mut reader: Option<R>,
+) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if let Some(reader) = reader.as_mut() {
+            let _ = reader.read_to_end(&mut buffer);
+        }
+        buffer
+    })
+}
+
+/// Compilation lancée en arrière-plan : le journal et le run qui la suit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuildStarted {
+    /// Journal de compilation (`<ws>/logs/build-<agent>.log`).
+    pub log: PathBuf,
+    /// Run suivi par `agent_control status|list|kill` (clé `build:<agent>`).
+    pub run_id: String,
+}
+
+pub fn spawn_build(ws: &Path, agent: &str, opts: BuildOptions) -> Result<BuildStarted, String> {
     let log = log_path(ws, agent);
     if let Some(parent) = log.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Dossier '{}' impossible à créer : {e}", parent.display()))?;
     }
+    let run = crate::registry::begin_build(agent, ws);
+    let run_id = run.run_id.clone();
     let ws = ws.to_path_buf();
     let agent = agent.to_string();
     let builder = std::thread::Builder::new().name(format!("build-{agent}"));
@@ -416,15 +570,36 @@ pub fn spawn_build(ws: &Path, agent: &str, opts: BuildOptions) -> Result<PathBuf
         let agent = agent.clone();
         let log = log.clone();
         move || {
-            if let Err(e) = build(&ws, &agent, &opts) {
-                eprintln!("swarm-control: {e}");
-                let _ = std::fs::write(&log, format!("swarm-control: {e}\n"));
-            }
+            let result = build_tracked(&ws, &agent, &opts, Some(&run));
+            let (status, outcome) = match &result {
+                Ok(outcome) => (
+                    crate::registry::Status::Done,
+                    crate::registry::Outcome {
+                        result: outcome.binary.display().to_string(),
+                        error: None,
+                    },
+                ),
+                Err(e) => {
+                    eprintln!("swarm-control: {e}");
+                    let _ = std::fs::write(&log, format!("swarm-control: {e}\n"));
+                    (
+                        crate::registry::Status::Failed,
+                        crate::registry::Outcome { result: String::new(), error: Some(e.clone()) },
+                    )
+                }
+            };
+            let killed = run.kill_requested();
+            let code = result.as_ref().ok().map(|_| 0);
+            run.finish_quiet(
+                if killed { crate::registry::Status::Killed } else { status },
+                code,
+                outcome,
+            );
         }
     });
     spawned
         .map_err(|e| format!("Fil de compilation de '{agent}' impossible à lancer : {e}"))
-        .map(|_| log)
+        .map(|_| BuildStarted { log, run_id })
 }
 
 /// macOS : signature ad hoc si `codesign` est disponible (le binaire reste valide sans).
@@ -453,13 +628,19 @@ pub fn bin_version(path: &Path) -> Option<String> {
 
 /// Faut-il recompiler l'agent ? Vrai si le binaire manque, s'il ne répond pas à
 /// `--version`, ou si sa version diffère de celle de l'instance (version de
-/// swarm-control épinglée dans le crate).
-///
-/// Sans appelant pour l'instant : `status` publiera `rebuildNeeded` (§4.8).
-#[allow(dead_code)]
+/// swarm-control épinglée dans le crate). Lance le binaire : à demander pour un agent
+/// compilé (voir [`rebuild_needed_value`]).
 pub fn rebuild_needed(ws: &Path, agent: &str) -> bool {
     let binary = executable::path(ws, agent);
     bin_version(&binary).is_none_or(|line| !version_matches(&line, env!("CARGO_PKG_VERSION")))
+}
+
+/// Champ `rebuildNeeded` du document `status` (§4.8) : `Null` si l'agent n'a **jamais** été
+/// compilé (ni binaire dans `<ws>/bin/`, ni dossier `agents/<agent>/build/`), sinon
+/// [`rebuild_needed`].
+pub fn rebuild_needed_value(ws: &Path, agent: &str) -> Value {
+    let compiled = executable::path(ws, agent).is_file() || build_dir(ws, agent).is_dir();
+    if compiled { Value::Bool(rebuild_needed(ws, agent)) } else { Value::Null }
 }
 
 /// Supprime le binaire compilé (`<ws>/bin/<agent><exe>`) et le dossier de compilation
@@ -486,14 +667,36 @@ fn version_matches(bin_version: &str, current: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        BUILD_RS, build_dir, cargo_in, definition_of, generate, generate_with_path, is_secret_name,
-        log_path, looks_like_token, rebuild_needed, remove, target_dir, write,
+        BUILD_RS, BuildOptions, build_dir, cargo_in, cargo_toml, definition_of, generate,
+        generate_with_path, is_secret_name, log_path, looks_like_token, main_rs, rebuild_needed,
+        rebuild_needed_value, regenerate, remove, spawn_build, target_dir, write,
     };
-    use serde_json::json;
+    use serde_json::{Value, json};
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static SEQ: AtomicU32 = AtomicU32::new(0);
+
+    /// La compilation en arrière-plan est un **run suivi** : visible par `agent_control`
+    /// sous la clé `build:<agent>`, terminé (ici en échec : le crate n'existe pas) quand le
+    /// fil a fini, et sans bail sur l'agent.
+    #[test]
+    fn un_build_lance_est_un_run_suivi_qui_termine() {
+        let ws = TempDir::new("suivi");
+        let agent = format!("suivi-{}", SEQ.fetch_add(1, Ordering::Relaxed));
+        let started = spawn_build(&ws.0, &agent, BuildOptions::default()).unwrap();
+        assert!(started.run_id.starts_with("build-"), "{}", started.run_id);
+        let run = crate::registry::find(&agent, Some("build")).expect("run de build inscrit");
+        assert_eq!(run.run_id, started.run_id);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while run.snapshot().status == crate::registry::Status::Running {
+            assert!(std::time::Instant::now() < deadline, "le build n'a pas terminé");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let snap = run.snapshot();
+        assert_eq!(snap.status, crate::registry::Status::Failed, "crate absent");
+        assert!(snap.outcome.as_ref().and_then(|o| o.error.as_ref()).is_some());
+    }
 
     /// Dossier temporaire unique, supprimé à la fin du test.
     struct TempDir(PathBuf);
@@ -643,6 +846,85 @@ mod tests {
         let manifest = std::fs::read_to_string(dir.join("Cargo.toml")).unwrap();
         assert!(manifest.contains("path = ") && manifest.contains("=0.1.2"), "{manifest}");
         assert!(manifest.contains("/depôt") || manifest.contains("\\\\depôt"), "{manifest}");
+    }
+
+    /// `swarm-control build <agent>` régénère d'abord le crate : depuis l'`agent.json` existant,
+    /// `Cargo.toml` et `main.rs` reprennent la version de l'instance et la classe enregistrée.
+    /// Aucun `cargo` n'est lancé ici.
+    #[test]
+    fn regenerate_reecrit_le_crate_a_la_version_de_l_instance() {
+        let ws = TempDir::new("regenere");
+        // Sans crate (agent.json absent) : erreur claire, rien d'écrit.
+        let err = regenerate(&ws.0, "alice").unwrap_err();
+        assert!(err.contains("'alice'") && err.contains("agent.json"), "{err}");
+        assert!(!build_dir(&ws.0, "alice").exists());
+        // Un crate généré par une autre version, avec une autre classe gravée.
+        let dir = build_dir(&ws.0, "alice");
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        write(&dir.join("Cargo.toml"), &cargo_toml("alice", "0.0.1", None)).unwrap();
+        write(&dir.join("src").join("main.rs"), &main_rs("alice", "custom")).unwrap();
+        write(
+            &dir.join("agent.json"),
+            &json!({
+                "name": "alice",
+                "class": "discord",
+                "runner": "claude",
+                "prompt": "Tu es Alice.",
+                "model": "sonnet",
+                "mcpServers": ["db"],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(regenerate(&ws.0, "alice").unwrap(), dir);
+        let version = env!("CARGO_PKG_VERSION");
+        // Cargo.toml : dépendance épinglée à la version courante, jamais par chemin.
+        let manifest = std::fs::read_to_string(dir.join("Cargo.toml")).unwrap();
+        assert!(manifest.contains(&format!("version = \"={version}\"")), "{manifest}");
+        assert!(!manifest.contains("0.0.1"), "{manifest}");
+        // Seule la dépendance compte : `[[bin]]` porte toujours son propre `path = "src/main.rs"`.
+        assert!(!manifest.contains("{ path = "), "dépendance épinglée au registre : {manifest}");
+        // main.rs : la classe d'agent.json est gravée.
+        let main = std::fs::read_to_string(dir.join("src").join("main.rs")).unwrap();
+        assert!(main.contains("const AGENT: &str = \"alice\";"), "{main}");
+        assert!(main.contains("const CLASS: &str = \"discord\";"), "{main}");
+        // agent.json : réécrit par `generate` (mise en forme, sans secret), serveurs MCP gardés.
+        let doc: Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("agent.json")).unwrap())
+                .unwrap();
+        assert_eq!(doc["class"], "discord");
+        assert_eq!(doc["prompt"], "Tu es Alice.");
+        assert_eq!(doc["mcpServers"], json!(["db"]), "les noms de serveurs MCP sont conservés");
+        assert!(std::fs::read_to_string(dir.join("build.rs")).unwrap() == BUILD_RS);
+        // Sans classe : repli `custom`, comme à la génération.
+        write(&dir.join("agent.json"), &json!({ "prompt": "p" }).to_string()).unwrap();
+        regenerate(&ws.0, "alice").unwrap();
+        let main = std::fs::read_to_string(dir.join("src").join("main.rs")).unwrap();
+        assert!(main.contains("const CLASS: &str = \"custom\";"), "{main}");
+        // Illisible, ou sans prompt : refus, rien de cassé.
+        write(&dir.join("agent.json"), "{pas du json").unwrap();
+        assert!(regenerate(&ws.0, "alice").unwrap_err().contains("JSON invalide"));
+        write(&dir.join("agent.json"), r#"{"class":"discord"}"#).unwrap();
+        assert!(regenerate(&ws.0, "alice").unwrap_err().contains("prompt requis"));
+    }
+
+    /// Champ `rebuildNeeded` de `status` : `null` tant que l'agent n'a jamais été compilé,
+    /// présent dès qu'un binaire ou un dossier de build existe.
+    #[test]
+    fn rebuild_needed_value_est_null_sans_binaire_ni_dossier_de_build() {
+        let ws = TempDir::new("rebuild-valeur");
+        assert_eq!(rebuild_needed_value(&ws.0, "alice"), Value::Null, "jamais compilé");
+        // Faux binaire texte : le champ est là, à `true` (il ne répond pas à `--version`).
+        let bin = super::super::executable::path(&ws.0, "alice");
+        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+        std::fs::write(&bin, "ceci n'est pas un executable").unwrap();
+        assert_eq!(rebuild_needed_value(&ws.0, "alice"), Value::Bool(true));
+        std::fs::remove_file(&bin).unwrap();
+        // Dossier de build seul, même vide : le champ est toujours là.
+        std::fs::create_dir_all(build_dir(&ws.0, "alice")).unwrap();
+        assert_eq!(rebuild_needed_value(&ws.0, "alice"), Value::Bool(true));
+        std::fs::remove_dir(build_dir(&ws.0, "alice")).unwrap();
+        assert_eq!(rebuild_needed_value(&ws.0, "alice"), Value::Null, "plus rien : jamais compilé");
     }
 
     #[test]

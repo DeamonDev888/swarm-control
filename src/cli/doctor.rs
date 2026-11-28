@@ -10,10 +10,11 @@
 
 use super::args::Options;
 use super::target;
-use crate::agents::{Runner, templates};
+use crate::agents::{Runner, compile, templates};
 use crate::{agents, binaries, peers};
 use serde_json::Value;
 use std::fmt::Display;
+use std::io;
 use std::path::{Path, PathBuf};
 
 pub fn run(options: &Options, ws: &Path) -> Result<(), String> {
@@ -26,6 +27,7 @@ pub fn run(options: &Options, ws: &Path) -> Result<(), String> {
     instances(&mut checks);
     advertised_agents(&mut checks);
     writable(&mut checks, ws);
+    compilation(&mut checks, ws);
     // `--agent X` : prérequis du modèle de cet agent (variables, serveurs MCP, binaire).
     if let Some(agent) = options.agent.as_deref() {
         template_checks(&mut checks, options, ws, agent);
@@ -207,6 +209,48 @@ fn probe_writable(dir: &Path) -> std::io::Result<()> {
     std::fs::remove_file(&probe)
 }
 
+/// « compilation d'agents » (PLAN §4.8) : `cargo` dans le `PATH` (ou variable `CARGO`),
+/// architecture de l'hôte, dossier de compilation partagé `<ws>/build/target` inscriptible.
+/// Rien d'indispensable : sans Rust, les agents tournent quand même via l'instance — seul
+/// l'exécutable dédié manque.
+fn compilation(checks: &mut Checks, ws: &Path) {
+    let target = compile::target_dir(ws);
+    let writable = probe_writable(&target);
+    let (ok, detail) = compilation_detail(
+        compile::cargo_path().as_deref(),
+        std::env::consts::ARCH,
+        &target,
+        writable.as_ref().map(|_| ()),
+    );
+    if ok {
+        checks.ok("compilation d'agents", detail);
+    } else {
+        checks.warn("compilation d'agents", detail);
+    }
+}
+
+/// Texte de la ligne « compilation d'agents », sans aucune I/O : `cargo` trouvé (ou `None` :
+/// message avec le lien rustup), architecture de l'hôte, dossier partagé `target` et résultat
+/// de sa sonde d'écriture. Rend `(tout_va_bien, détail)`.
+fn compilation_detail(
+    cargo: Option<&Path>,
+    arch: &str,
+    target: &Path,
+    target_writable: Result<(), &io::Error>,
+) -> (bool, String) {
+    let (cargo_ok, cargo_text) = match cargo {
+        Some(path) => (true, format!("cargo {}", path.display())),
+        None => {
+            (false, format!("cargo introuvable — installe Rust depuis {}", compile::RUSTUP_URL))
+        }
+    };
+    let (target_ok, target_text) = match target_writable {
+        Ok(()) => (true, format!("dossier partagé {} inscriptible", target.display())),
+        Err(e) => (false, format!("dossier partagé {} non inscriptible ({e})", target.display())),
+    };
+    (cargo_ok && target_ok, format!("{cargo_text} · cible {arch} · {target_text}"))
+}
+
 /// Nombre de serveurs MCP d'un `.mcp.json` ; `None` si le JSON est illisible.
 fn mcp_count(text: &str) -> Option<usize> {
     let doc: Value = serde_json::from_str(text).ok()?;
@@ -250,7 +294,57 @@ impl Checks {
 
 #[cfg(test)]
 mod tests {
-    use super::{Checks, mcp_count, probe_writable};
+    use super::{Checks, compilation, compilation_detail, mcp_count, probe_writable};
+    use crate::agents::compile;
+    use std::io;
+    use std::path::Path;
+
+    /// La ligne « compilation d'agents » est formatée sans I/O : chemin de `cargo` (ou lien
+    /// rustup), cible de l'hôte, dossier partagé et résultat de sa sonde.
+    #[test]
+    fn la_ligne_de_compilation_formate_cargo_la_cible_et_le_dossier_partage() {
+        let target = Path::new("/ws/build/target");
+        let (ok, line) =
+            compilation_detail(Some(Path::new("/outils/cargo")), "x86_64", target, Ok(()));
+        assert!(ok, "{line}");
+        assert_eq!(
+            line,
+            "cargo /outils/cargo · cible x86_64 · dossier partagé /ws/build/target inscriptible"
+        );
+        // Sans cargo : le lien rustup, et la ligne ne passe pas.
+        let (ok, line) = compilation_detail(None, "aarch64", target, Ok(()));
+        assert!(!ok, "{line}");
+        assert!(line.contains("cargo introuvable") && line.contains("https://rustup.rs"), "{line}");
+        assert!(line.contains("cible aarch64") && line.contains("inscriptible"), "{line}");
+        // Dossier partagé non inscriptible : l'erreur est montrée, la ligne ne passe pas.
+        let err = io::Error::other("accès refusé");
+        let (ok, line) = compilation_detail(Some(Path::new("cargo")), "x86_64", target, Err(&err));
+        assert!(!ok, "{line}");
+        assert!(line.contains("non inscriptible (accès refusé)"), "{line}");
+    }
+
+    /// Le contrôle réel écrit une seule ligne, jamais indispensable, avec la cible de l'hôte
+    /// et le dossier partagé du workspace (`cargo` trouvé ou non selon la machine).
+    #[test]
+    fn le_controle_de_compilation_n_est_jamais_indispensable() {
+        let ws =
+            std::env::temp_dir().join(format!("swarm-doctor-compilation-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&ws);
+        std::fs::create_dir_all(&ws).unwrap();
+        let mut checks = Checks::default();
+        compilation(&mut checks, &ws);
+        let _ = std::fs::remove_dir_all(&ws);
+        assert_eq!(checks.lines.len(), 1, "{:?}", checks.lines);
+        assert_eq!(checks.essential, 0, "jamais indispensable");
+        let line = &checks.lines[0];
+        assert!(
+            line.starts_with("✓ compilation d'agents ")
+                || line.starts_with("✗ compilation d'agents "),
+            "{line}"
+        );
+        assert!(line.contains(&format!("cible {}", std::env::consts::ARCH)), "{line}");
+        assert!(line.contains(&compile::target_dir(&ws).display().to_string()), "{line}");
+    }
 
     #[test]
     fn counts_mcp_servers_and_rejects_broken_json() {

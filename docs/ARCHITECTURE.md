@@ -16,7 +16,7 @@ Un module ne dépend que des couches **au-dessus** de lui dans ce tableau (plus 
 | 2 | `config` | workspace, `.env`, interpolation `$VAR`, home Hermes, délais | `workspace.rs`, `dotenv.rs`, `env.rs`, `interpolate.rs`, `hermes_home.rs`, `timeouts.rs`, `state.rs` |
 | 3 | `binaries` | localisation de `claude` et `hermes` | `claude.rs`, `hermes.rs`, `path_lookup.rs` |
 | 4 | `state` | état persistant **par agent** : un fichier `bridge/state/<runner>-<agent>.json` | `doc.rs`, `path.rs` |
-| 5 | `sessions` | session d'un agent, dans son état ; repli en lecture sur l'ancien `agents.json` | `get.rs`, `save.rs`, `delete.rs`, `legacy.rs`, `entry.rs` |
+| 5 | `sessions` | session d'un agent, dans son état | `get.rs`, `save.rs`, `delete.rs`, `entry.rs` |
 | 6 | `process` | lancer, capturer, attendre, tuer un arbre de processus | `run.rs`, `readers.rs`, `wait.rs`, `kill.rs`, `alive.rs`, `stdin.rs`, `utf8.rs` |
 | 7 | `owners` | **bail** d'un agent : un seul process le fait tourner (inter-process) | `acquire.rs`, `takeover.rs`, `lease.rs`, `holder.rs`, `inspect.rs`, `sweep.rs` |
 | 8 | `registry` | runs vivants (mémoire) + dernier run sur disque + bail + balayeur | `index.rs`, `live_run.rs`, `lifecycle.rs`, `disk.rs`, `sweeper.rs`, `output_buffer.rs` |
@@ -26,7 +26,7 @@ Un module ne dépend que des couches **au-dessus** de lui dans ce tableau (plus 
 | 11 | `residents` | **agents résidents** : serveur MCP propre, file, fil de travail, hébergement | `start.rs`, `stop.rs`, `host.rs`, `ctx.rs`, `inbox.rs`, `worker.rs`, `waiting.rs`, `server.rs`, `reset.rs`, `mcp/`, `bridge/` (pont HTTP, dialecte Discord) |
 | 11b | `routing` | un run d'agent hébergé est transmis à son hôte (`ask`) | `eligible.rs`, `forward.rs` |
 | 11c | `instance` | numéro d'instance `swarm-control-N` (bail + battement) | `claim.rs` |
-| 12 | `tools` | les 10 outils MCP de l'instance (schéma + handler) | un fichier ou dossier par outil |
+| 12 | `tools` | les 11 outils MCP de l'instance (schéma + handler) | un fichier ou dossier par outil |
 | 13 | `server` | serveur LiteMCP de l'instance : construction, écoute, annonce | `builder.rs`, `bind.rs`, `banner.rs` |
 | 14 | `cli` | ligne de commande (`--resident`, `--workspace`…) | `args.rs`, `help.rs`, `serve.rs` |
 
@@ -86,7 +86,7 @@ attendent (`.claude/`, profils Hermes).
 | `%TEMP%/swarm-control-instances/<N>.json` | **bail de numéro d'instance** (`swarm-control-N`) |
 | `%TEMP%/litemcp-registry/swarm-control-<N>.json` | annonce LiteMCP du serveur d'administration de l'instance |
 | `%TEMP%/litemcp-registry/swarm-<agent>.json` | annonce LiteMCP du serveur de l'agent résident (port, PID, instance) |
-| `<ws>/bridge/agents.json` | ancien fichier de sessions hérité d'OverMind (plus supporté) : **lu** en repli, jamais écrit — retiré en 0.2.0 |
+| `<ws>/bridge/agents.json` | **historique, non lu** : ancien fichier de sessions hérité d'OverMind, plus supporté — swarm-control ne le lit ni ne l'écrit plus |
 | `<hermes>/profiles/<n>/` | profil Hermes (géré par le CLI `hermes`) |
 | `<ws>/model-aliases.json` | surnoms de modèles (optionnel) |
 

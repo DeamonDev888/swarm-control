@@ -33,7 +33,7 @@ en vigueur qu'avec le commit de `cli/mod.rs`.
 
 - [ ] Committer `src/cli/mod.rs` (avec `src/cli/agent.rs` et `src/lib.rs`) pour rendre le refus
       effectif et retirer l'alias `agent_name`.
-- [ ] `main` locale est derrière `origin/main` de 5 commits (README, visuels) et l'arbre modifie
+- [x] `main` locale est derrière `origin/main` de 5 commits (README, visuels) et l'arbre modifie  (résolu : `origin/main` fusionné dans la branche)
       les mêmes fichiers : fast-forward/merge à traiter avant le commit (K11).
 - [ ] L'arbre porte ~100 fichiers modifiés ou non suivis (§4.1-4.8) : découper les commits par
       sujet, ne pas tout mettre dans celui-ci.
@@ -101,8 +101,8 @@ la CI n'est pas revérifiée.
 
 ### Reste
 
-- [ ] README : section archétypes (`run_agent {archetype}`, `verify:true`, permissions).
-- [ ] `RESIDENT-AGENTS.md` : quand préférer un archétype à un agent nommé.
+- [x] README : section archétypes (`run_agent {archetype}`, `verify:true`, permissions).
+- [x] `RESIDENT-AGENTS.md` : quand préférer un archétype à un agent nommé.
 
 ## 4.4 Tâches planifiées
 
@@ -113,13 +113,13 @@ la CI n'est pas revérifiée.
 
 ### Reste
 
-- [ ] **`--every` et `--window` sont des drapeaux morts** : parsés dans `cli/args.rs`, jamais lus
+- [x] **`--every` et `--window` sont des drapeaux morts** : parsés dans `cli/args.rs`, jamais lus
       par `cli/serve.rs` ni `cli/agent.rs`. Les transmettre à `residents::start` (ou poser le
       schedule process-wide comme le dialecte) et couvrir par un test.
 - [ ] Modèles `x`, `google`, `monitor` : aucun `schedule` par défaut dans leur JSON ; en poser un
       (sondage des mentions, agenda du jour, surveillance) ou le documenter comme à créer.
 - [ ] Test e2e : un tour planifié arrive une seule fois, marqué `from: "schedule"`.
-- [ ] README : `--every 5m "<prompt>"`, fenêtre, limite « pas de cron complet ».
+- [x] README : `--every 5m "<prompt>"`, fenêtre, limite « pas de cron complet ».
 
 ## 4.5 Runner générique
 
@@ -143,11 +143,11 @@ la CI n'est pas revérifiée.
 
 ### Reste
 
-- [ ] **`src/cli/memory.rs` n'est pas compilé** : `mod memory;` absent de `src/cli/mod.rs`, donc
+- [x] **`src/cli/memory.rs` n'est pas compilé** : `mod memory;` absent de `src/cli/mod.rs`, donc
       `memory search|add|forget` n'existe pas dans le binaire. Déclarer le module, la commande
       (`args.rs`), l'aide (`help.rs`) et les tests CLI.
 - [ ] Panneau mémoire dans la TUI (lecture, recherche, ajout) — absent de `src/tui/`.
-- [ ] README : `memory_store` / `memory_search` / `memory_forget`, portée `swarm`, filtre des
+- [x] README : `memory_store` / `memory_search` / `memory_forget`, portée `swarm`, filtre des
       jetons, différence avec la session (`--resume`).
 - [ ] Test e2e : un tour écrit un souvenir, le tour suivant le retrouve via `memory_search`.
 
@@ -192,29 +192,29 @@ la CI n'est pas revérifiée.
 
 ### Reste
 
-- [ ] Le build n'est **pas suivi par `agent_control`** : `create_agent` rend `{status:"building"}`
+- [x] Le build n'est **pas suivi par `agent_control`** : `create_agent` rend `{status:"building"}`
       sans `runId` ; `spawn_build` est un fil nommé, pas un run. Enregistrer un run (ou un suivi
       dédié) pour `status` / `stream` / `kill`.
-- [ ] `swarm-control build <agent>` ne régénère pas le crate avant de compiler : un changement de
+- [x] `swarm-control build <agent>` ne régénère pas le crate avant de compiler : un changement de
       nom, de classe ou de version n'est pas pris en compte. Appeler `compile::generate` d'abord.
-- [ ] Icône Windows : aucun `.ico` n'est produit ; `build.rs` ne pose l'icône et la version que si
+- [x] Icône Windows : aucun `.ico` n'est produit ; `build.rs` ne pose l'icône et la version que si
       `resources/icon.ico` existe. Convertir `assets/classes/hornet-pixel-<classe>.svg` en `.ico`
       à la génération, puis vérifier les ressources du binaire.
-- [ ] Ligne « compilation d'agents » dans `doctor` (cargo présent, cible de l'hôte, cache partagé).
-- [ ] `<workspace>/.env` relu à chaud quand sa date de modification change ; outil MCP `reload` du
+- [x] Ligne « compilation d'agents » dans `doctor` (cargo présent, cible de l'hôte, cache partagé).
+- [x] `<workspace>/.env` relu à chaud quand sa date de modification change ; outil MCP `reload` du
       résident et commande `swarm-control reload <agent>` (les variables système gardent la
       priorité) — `config/state.rs` ne le lit qu'une fois.
-- [ ] `rebuildNeeded` dans `status` (binaire compilé avec une autre version que l'instance) —
+- [x] `rebuildNeeded` dans `status` (binaire compilé avec une autre version que l'instance) —
       `compile::rebuild_needed` existe mais n'est appelé nulle part.
-- [ ] Docs : README §3 (« Un agent = un exécutable » décrit encore la copie), `RESIDENT-AGENTS.md`,
+- [x] Docs : README §3 (« Un agent = un exécutable » décrit encore la copie), `RESIDENT-AGENTS.md`,
       CHANGELOG (note de migration : les copies renommées ne servent plus leur agent) ; la
       description de l'outil `create_agent` dit encore « copie le binaire courant ».
-- [ ] `tests/e2e/compiled.rs` (aujourd'hui 3 lignes) : crate généré, `agent.json` avec un jeton
+- [x] `tests/e2e/compiled.rs` (aujourd'hui 3 lignes) : crate généré, `agent.json` avec un jeton
       refusé, refus de `--agent`, définition du workspace prioritaire, `.env` modifié relu,
       `rebuildNeeded`, erreur sans `cargo` (faux PATH).
 - [ ] Un test de **vraie compilation**, marqué `#[ignore]` (lent, réseau), lancé en CI une fois par
       release.
-- [ ] Retirer l'alias `agent_name` de `cli/exe.rs` quand `cli/mod.rs` est commité (ce commit ne le
+- [x] Retirer l'alias `agent_name` de `cli/exe.rs` quand `cli/mod.rs` est commité (ce commit ne le
       peut pas).
 
 ## 5. Corrections
@@ -233,7 +233,7 @@ la CI n'est pas revérifiée.
       aucune preuve locale, à poser dans les réglages du dépôt.
 - [ ] **K10** Deux docs annoncent encore la lecture de `bridge/agents.json` :
       `docs/ARCHITECTURE.md` (l. 89) et `docs/RESIDENT-AGENTS.md` (l. 72). Retirer ces phrases.
-- [ ] **K11** `main` locale en retard de 5 commits sur `origin/main` (README, visuels) ; l'arbre
+- [x] **K11** `main` locale en retard de 5 commits sur `origin/main` (README, visuels) ; l'arbre
       modifie les mêmes fichiers. Fast-forward/merge avant le commit, sans écraser les visuels
       distants.
 

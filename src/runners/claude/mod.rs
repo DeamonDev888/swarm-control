@@ -78,7 +78,7 @@ pub fn run(
 fn command(req: &RunRequest, plan: &Plan, token: Option<&String>) -> Command {
     let mut cmd = process::command(&binaries::claude_binary());
     cmd.args(&plan.args).current_dir(&plan.cwd);
-    for (k, v) in &config::get().dotenv {
+    for (k, v) in &config::get().dotenv() {
         cmd.env(k, v);
     }
     for (k, v) in &plan.env {
@@ -357,7 +357,7 @@ mod tests {
         assert!(!variables.contains_key("NOMBRE"), "une valeur non textuelle ne part pas");
         // Sans jeton de secours : aucun jeton imposé par nous (sauf `.env` de l'utilisateur).
         let sans = envs(&command(&req, &plan, None));
-        if !crate::config::get().dotenv.contains_key("ANTHROPIC_AUTH_TOKEN") {
+        if !crate::config::get().dotenv().contains_key("ANTHROPIC_AUTH_TOKEN") {
             assert!(!sans.contains_key("ANTHROPIC_AUTH_TOKEN"));
         }
         // Sans agent : pas de nom d'agent dans l'environnement.

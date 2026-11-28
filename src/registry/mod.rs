@@ -25,7 +25,7 @@ mod status;
 mod sweeper;
 
 pub use disk::{disk_entry, mark_killed};
-pub use index::{all, begin, find, find_by_run_id};
+pub use index::{all, begin, begin_build, find, find_by_run_id};
 pub use live_run::LiveRun;
 pub use outcome::Outcome;
 pub use snapshot::Snapshot;

@@ -6,10 +6,15 @@
 //! 2. un pair vivant est annoncé → l'outil `status` de son serveur ;
 //! 3. sinon → le disque : `session` (`sessions::get`) et `lastRun` (`registry::disk_entry`),
 //!    avec `resident: false`.
+//!
+//! `rebuildNeeded` (§4.8) est dans les trois documents : `null` tant que l'agent n'a jamais
+//! été compilé, sinon vrai quand son binaire dédié n'est pas à la version de l'instance ;
+//! le résumé le signale par une ligne « binaire : à recompiler ».
 
 use super::args::Options;
 use super::output;
 use super::target;
+use crate::agents::compile;
 use crate::peers::{self, CallError};
 use crate::registry;
 use crate::sessions;
@@ -58,6 +63,7 @@ fn disk(options: &Options, ws: &Path, agent: &str) -> Result<(), String> {
             "resident": false,
             "session": session,
             "lastRun": last_run,
+            "rebuildNeeded": compile::rebuild_needed_value(ws, agent),
         }),
     )
 }
@@ -125,6 +131,9 @@ pub fn summary(value: &Value) -> String {
         }
         lines.push(line);
     }
+    if value.get("rebuildNeeded").and_then(Value::as_bool).unwrap_or(false) {
+        lines.push(String::from("binaire  : à recompiler"));
+    }
     lines.join("\n") + "\n"
 }
 
@@ -174,6 +183,22 @@ mod tests {
         assert!(text.contains("session  : (aucune)"), "{text}");
         assert!(text.contains("dernier  : failed · pid 4212 · 2020-09-13 12:26:40Z"), "{text}");
         assert!(!text.contains("serveur"), "{text}");
+    }
+
+    /// La ligne « binaire » n'apparaît que si `rebuildNeeded` vaut vrai : ni pour `false`, ni
+    /// pour `null` (jamais compilé), ni s'il est absent.
+    #[test]
+    fn summarises_a_binary_to_rebuild_only_when_needed() {
+        let doc = |rebuild| json!({ "agent": "bob", "runner": "claude", "rebuildNeeded": rebuild });
+        let text = summary(&doc(json!(true)));
+        assert!(text.contains("agent    : bob (claude)"), "{text}");
+        assert!(text.lines().any(|line| line == "binaire  : à recompiler"), "{text}");
+        for quiet in [json!(false), serde_json::Value::Null] {
+            let text = summary(&doc(quiet));
+            assert!(!text.contains("recompiler"), "{text}");
+        }
+        let text = summary(&json!({ "agent": "bob", "runner": "claude" }));
+        assert!(!text.contains("recompiler"), "{text}");
     }
 
     #[test]

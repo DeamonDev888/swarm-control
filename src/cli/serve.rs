@@ -19,6 +19,13 @@ pub fn start(options: Options) -> ExitCode {
         );
         return ExitCode::from(2);
     }
+    // La tâche planifiée est celle d'un agent résident (PLAN §4.4) : une instance n'en a pas.
+    if options.every.is_some() || options.window.is_some() || options.prompt.is_some() {
+        eprintln!(
+            "swarm-control: --every sert un seul agent : ajoute --agent NAME (ou lance le binaire compilé de l'agent)"
+        );
+        return ExitCode::from(2);
+    }
     let number = match instance::claim(options.instance) {
         Ok(n) => n,
         Err(e) => {
@@ -46,8 +53,8 @@ fn host_residents(names: &[String], ws: &Path) -> Result<(), String> {
     for name in names {
         let runner =
             agents::resolve(ws, name, None).map_err(|e| format!("--resident {name}: {e}"))?;
-        let info =
-            residents::start(ws, runner, name).map_err(|e| format!("--resident {name}: {e}"))?;
+        let info = residents::start(ws, runner, name, None)
+            .map_err(|e| format!("--resident {name}: {e}"))?;
         eprintln!("agent résident {} ({}) → {}", info.agent, info.runner, info.url);
     }
     Ok(())

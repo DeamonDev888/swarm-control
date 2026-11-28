@@ -6,6 +6,7 @@ pub fn text() -> String {
          USAGE (instance) : swarm-control [--port N] [--host H] [--workspace DIR] [--instance N] [--resident AGENT[,AGENT…]]\n\
          \x20                  | swarm-control <commande>\n\
          USAGE (agent)    : swarm-control --agent AGENT [--port N] [--bridge N] [--host H] [--workspace DIR]\n\
+         \x20                  [--every DURÉE \"<prompt>\" [--window HH:MM-HH:MM]]\n\
          \x20                  (développement et tests) ou le binaire compilé de l'agent (`discord`,\n\
          \x20                  `discord.exe` : create_agent {{executable:true}} ou `build <agent>`)\n\
          \x20                  | discord <commande>\n\n\
@@ -19,7 +20,10 @@ pub fn text() -> String {
          \x20 reset                oublie la session (le prochain tour repart à neuf)\n\
          \x20 config [--file NOM]  fichiers de l'agent, secrets masqués (filtre par sous-chaîne)\n\
          \x20 schema <outil>       schéma d'entrée d'un outil servi par un serveur qui tourne\n\
-         \x20                      (`--port N`, le serveur de l'agent, ou une instance vivante)\n\n\
+         \x20                      (`--port N`, le serveur de l'agent, ou une instance vivante)\n\
+         \x20 memory search \"…\"    mémoire native : search [-n N] [--swarm] · add [--tags a,b] ·\n\
+         \x20                      forget <id> (le même fichier que les outils memory_*)\n\
+         \x20 reload               relit à chaud les .env du workspace (hébergé ici, ou pair vivant)\n\n\
          Commandes d'instance :\n\
          \x20 agents               agents du workspace et leur résidence\n\
          \x20 run <agent> \"<prompt>\"  un tour d'agent (à son hôte s'il est résident ailleurs)\n\
@@ -39,6 +43,10 @@ pub fn text() -> String {
          --runner R            claude | hermes | antigravity (si l'agent existe sous plusieurs)\n\
          --model M             modèle imposé au tour (`ask`, `run`)\n\
          --timeout-ms MS       attente maximale d'un tour (défaut 3600000)\n\
+         --every DURÉE        tâche planifiée de l'agent (mode agent) : un tour \"<prompt>\" (positionnel\n\
+         \x20                     de serve) toutes les DURÉE (30s, 5m, 1h30), dans la même file que les\n\
+         \x20                     demandes ; prime sur le schedule de la définition de l'agent\n\
+         --window HH:MM-HH:MM  fenêtre horaire locale de la tâche planifiée (ex. 09:00-18:00)\n\
          --offline             build : `cargo build --offline` (registre local déjà complet)\n\
          --json                sortie JSON brute au lieu du résumé lisible\n\
          --debug               une ligne par requête MCP, commande lancée (secrets masqués),\n\

@@ -3,7 +3,7 @@
 use super::ctx::Ctx;
 use super::host::AgentHost;
 use super::info::HostInfo;
-use super::{server, table, worker};
+use super::{Schedule, server, table, worker};
 use crate::agents::{self, Runner};
 use crate::owners::{self, Busy};
 use std::path::Path;
@@ -13,8 +13,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static TOKEN_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Rend `agent` résident dans ce process : bail d'hébergement, serveur MCP, file et fil de travail.
-pub fn start(ws: &Path, runner: Runner, agent: &str) -> Result<HostInfo, String> {
-    start_on(ws, runner, agent, None)
+/// `schedule` : la tâche planifiée de la ligne de commande (`--every`), qui prime sur le
+/// `schedule` de la définition ; `None` : celle de la définition seule, s'il y en a une.
+pub fn start(
+    ws: &Path,
+    runner: Runner,
+    agent: &str,
+    schedule: Option<&Schedule>,
+) -> Result<HostInfo, String> {
+    start_on(ws, runner, agent, None, schedule)
 }
 
 /// Comme [`start`], avec l'adresse d'écoute du serveur de l'agent (`host:port`) ; `None` =
@@ -25,6 +32,7 @@ pub fn start_on(
     runner: Runner,
     agent: &str,
     listen: Option<&str>,
+    schedule: Option<&Schedule>,
 ) -> Result<HostInfo, String> {
     agents::validate_name(agent)?;
     if !agents::exists_for(ws, agent, runner) {
@@ -50,9 +58,10 @@ pub fn start_on(
         })
         .map_err(|e| format!("thread du serveur impossible: {e}"))?;
     let worker_ctx = Arc::clone(&ctx);
+    let schedule = schedule.cloned();
     let worker = std::thread::Builder::new()
         .name(format!("swarm-worker-{agent}"))
-        .spawn(move || worker::run(worker_ctx, lease))
+        .spawn(move || worker::run(worker_ctx, lease, schedule))
         .map_err(|e| {
             handle.shutdown();
             format!("thread de travail impossible: {e}")

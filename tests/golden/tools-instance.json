@@ -156,7 +156,7 @@
     "name": "agent_stop"
   },
   {
-    "description": "Crée un agent persistant. Claude : profil agents/<nom>/.claude (prompt, settings, MCP). Hermes : profil natif (hermes profile create) + SOUL.md. Antigravity : profil agents/<nom>/.antigravity (CLI agy). Le prompt définit sa persona ; avec template, la persona du modèle est utilisée (prompt la remplace) et ses variables requises sont vérifiées — voir list_templates. resident:true le rend aussitôt résident (serveur MCP propre, file de demandes). executable:true copie le binaire courant dans <workspace>/bin/<nom> ; unit:true (Linux) écrit en plus une unit systemd --headless (écrite, non activée).",
+    "description": "Crée un agent persistant. Claude : profil agents/<nom>/.claude (prompt, settings, MCP). Hermes : profil natif (hermes profile create) + SOUL.md. Antigravity : profil agents/<nom>/.antigravity (CLI agy). Le prompt définit sa persona ; avec template, la persona du modèle est utilisée (prompt la remplace) et ses variables requises sont vérifiées — voir list_templates. resident:true le rend aussitôt résident (serveur MCP propre, file de demandes). executable:true génère un crate sous <workspace>/agents/<nom>/build/ et lance cargo build --release en arrière-plan (journal : <workspace>/logs/build-<nom>.log) ; le binaire arrive dans <workspace>/bin/<nom>. Sans cargo : erreur claire avec le lien rustup (https://rustup.rs), l'agent reste créé. unit:true (Linux) écrit en plus une unit systemd --headless (écrite, non activée).",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {

@@ -7,9 +7,9 @@
 //!   option un pont HTTP parlant le dialecte Discord.
 //!
 //! Les autres commandes (`ask`, `status`, `history`, `reset`, `config`, `schema`, `agents`,
-//! `run`, `runs`, `build`, `doctor`) parlent à l'agent — hébergé ici, annoncé ailleurs, ou
-//! lancé localement — et à son workspace. L'agent visé est celui du binaire compilé, ou
-//! `--agent`.
+//! `run`, `runs`, `build`, `doctor`, `memory`, `reload`) parlent à l'agent — hébergé ici, annoncé
+//! ailleurs, ou lancé localement — et à son workspace. L'agent visé est celui du binaire compilé,
+//! ou `--agent`.
 
 mod agent;
 mod agents;
@@ -22,7 +22,9 @@ mod doctor;
 mod exe;
 mod help;
 mod history;
+mod memory;
 mod output;
+mod reload;
 mod reset;
 mod runs;
 mod schema;
@@ -139,6 +141,10 @@ fn run_with(default_agent: Option<String>, args: impl IntoIterator<Item = String
         Command::Templates => templates(&options, &ws),
         Command::Run { agent, prompt } => ask::run(&options, &ws, agent, prompt),
         Command::Build { agent, offline } => build::run(&options, &ws, agent, *offline),
+        Command::Memory { action, rest } => {
+            memory::run(agent.unwrap_or_default(), options.runner, action, rest, options.json)
+        }
+        Command::Reload => reload::run(&options, agent.unwrap_or_default()),
         Command::Runs => runs::run(&options, &ws),
         Command::Doctor => doctor::run(&options, &ws),
     };
@@ -209,6 +215,16 @@ mod tests {
         assert_eq!(run_with(None, ["status".to_string()]), ExitCode::from(2));
     }
 
+    /// `memory` et `reload` ciblent un agent : sans `--agent` (ni binaire nommé), code 2.
+    #[test]
+    fn memory_and_reload_exit_with_code_2_without_an_agent() {
+        assert_eq!(
+            run_with(None, ["memory".to_string(), "search".into(), "x".into()]),
+            ExitCode::from(2)
+        );
+        assert_eq!(run_with(None, ["reload".to_string()]), ExitCode::from(2));
+    }
+
     #[test]
     fn needs_agent_only_for_the_per_agent_commands() {
         assert!(Command::Ask { prompt: "x".into() }.needs_agent());
@@ -218,6 +234,8 @@ mod tests {
         assert!(!Command::Build { agent: "a".into(), offline: false }.needs_agent());
         assert!(!Command::Doctor.needs_agent());
         assert!(!Command::Schema { tool: "ask".into() }.needs_agent());
+        assert!(Command::Memory { action: "search".into(), rest: Vec::new() }.needs_agent());
+        assert!(Command::Reload.needs_agent());
     }
 
     #[test]

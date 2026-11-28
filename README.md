@@ -17,7 +17,7 @@
 **Des agents IA qui se souviennent, tournent en continu et se parlent entre eux.**
 Un seul exécutable d'environ 3 Mio, rien d'autre à installer — propulsé par [LiteMCP](https://github.com/DeamonDev888/litemcp).
 
-[Installer](#1-installer) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-10-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
+[Installer](#1-installer) · [Premiers pas](#2-premiers-pas) · [Un agent = un exécutable](#3-un-agent--un-exécutable) · [Commandes](#commandes) · [Outils MCP](#les-11-outils-mcp) · [Dépannage](#dépannage) · [Architecture](docs/ARCHITECTURE.md)
 
 </div>
 
@@ -146,15 +146,25 @@ swarm-control runs                                    # ce qui tourne / a tourn�
 
 ## 3. Un agent = un exécutable
 
-C'est la façon la plus simple de faire vivre un agent : **copiez l'exécutable sous le nom de l'agent**.
-Lancé ainsi, il ne sert que cet agent.
+C'est la façon la plus simple de faire vivre un agent : **compilez-lui son propre exécutable**.
+Son nom et sa classe sont gravés dans le binaire ; lancé seul, il ne sert que cet agent.
 
-```bash
-# Windows
-copy swarm-control.exe discord.exe
-# Linux / macOS
-cp swarm-control discord
+Depuis votre client MCP, à la création de l'agent :
+
+```text
+create_agent(name:"discord", runner:"claude", prompt:"Tu es…", executable:true)
+→ {"created":"discord", "executable":"<workspace>/bin/discord", "build":{"status":"building", "log":"<workspace>/logs/build-discord.log", …}}
 ```
+
+`executable:true` génère un petit crate sous `<workspace>/agents/discord/build/`, puis lance
+`cargo build --release` **en arrière-plan** (journal : `<workspace>/logs/build-discord.log`). Le
+binaire arrive dans `<workspace>/bin/discord` (`discord.exe` sous Windows) : ajoutez ce dossier au
+`PATH`, ou appelez-le par son chemin — les exemples ci-dessous écrivent `discord`.
+
+Il faut `cargo` sur la machine. Sans lui, l'agent est **quand même créé** et utilisable depuis
+l'instance (`run_agent` sur l'agent `discord`) ; l'échec, avec le lien d'installation
+([rustup](https://rustup.rs)), est écrit dans le journal de compilation. Rust installé, terminez avec
+`swarm-control build discord`, qui recompile au premier plan.
 
 Ensuite :
 
@@ -166,8 +176,13 @@ discord history                  # ses derniers échanges
 discord reset                    # oublie la conversation : repart à zéro
 ```
 
-> Pas envie de renommer ? `swarm-control --agent discord` fait exactement la même chose.
-> Depuis Claude Code, `create_agent(…, executable:true)` crée cette copie pour vous dans `<workspace>/bin/`.
+> **Pour développer ou tester, sans binaire** : `swarm-control --agent discord` sert l'agent
+> `discord` du workspace ; les mêmes commandes s'écrivent `swarm-control --agent discord ask "…"`.
+> Un binaire compilé, lui, **refuse `--agent`** (code 2) : il ne sert que son agent.
+
+> **Mise à jour depuis une version antérieure** : une copie renommée de `swarm-control`
+> (`discord.exe` = copie de `swarm-control.exe`) ne sert plus d'agent depuis la 0.2.0 — son
+> lancement est refusé, avec un message de migration. Compilez l'agent à la place.
 
 ### L'interface terminal
 
@@ -217,7 +232,8 @@ swarm-control [COMMANDE] [OPTIONS]        swarm-control --help pour le détail
 | `agents` | liste les agents et où ils tournent |
 | `run <agent> "<texte>"` | un tour pour un agent nommé |
 | `runs` | dernier run de chaque agent (statut, PID, fin) |
-| `ask "<texte>"` | pose une question à l'agent (`--agent NAME` ou exécutable renommé) |
+| `build <agent>` | recompile au premier plan le binaire dédié d'un agent ([3. Un agent = un exécutable](#3-un-agent--un-exécutable)) ; `--offline` pour compiler sans réseau |
+| `ask "<texte>"` | pose une question à l'agent (`--agent NAME`, ou depuis le binaire compilé de l'agent) |
 | `status` | état de l'agent |
 | `history [-n N]` | derniers échanges de l'agent |
 | `reset` | oublie la session de l'agent |
@@ -227,20 +243,28 @@ swarm-control [COMMANDE] [OPTIONS]        swarm-control --help pour le détail
 Options utiles : `--workspace DIR` (autre dossier de travail), `--port N`, `--resident alice,bob` (démarre des
 agents résidents avec le serveur), `--model M`, `--json` (sortie brute pour les scripts), `--debug` (journal détaillé).
 
+Tâches planifiées : un agent résident dont le fichier de définition porte un champ `schedule` reçoit un tour dans sa
+file à chaque intervalle — `{"every":"5m","prompt":"Vérifie tes mentions","window":"09:00-18:00"}`, ou la chaîne
+`"5m Vérifie tes mentions"` sans fenêtre horaire. Les drapeaux `--every <durée> "<prompt>"` et
+`--window HH:MM-HH:MM` font la même chose depuis la ligne de commande (`swarm-control --agent discord --every 5m "Vérifie tes mentions" --window 09:00-18:00`) :
+la tâche de la ligne de commande prime sur celle de la définition. Un intervalle et une
+fenêtre, pas un cron complet.
+
 ---
 
-## Les 10 outils MCP
+## Les 11 outils MCP
 
 Ce sont les outils que votre client MCP (Claude Code…) voit quand il est branché sur `swarm-control`.
 
 | Outil | Rôle |
 |---|---|
-| `create_agent` | Crée un agent : nom, runner, personnalité, modèle, serveurs MCP. Options : `resident:true` (l'allume aussitôt), `executable:true` (sa copie d'exécutable), `unit:true` (service systemd, Linux), `cloneFrom` (Hermes : réutilise les clés d'un profil). |
-| `run_agent` | Fait travailler un agent. Avec `agentName` : il reprend sa conversation. Sans : agent **jetable**, un seul tour. `background:true` rend la main tout de suite avec un `runId`. |
+| `create_agent` | Crée un agent : nom, runner, personnalité, modèle, serveurs MCP. Options : `template` (partir d'un modèle), `resident:true` (l'allume aussitôt), `executable:true` (compile son binaire dédié, voir [3. Un agent = un exécutable](#3-un-agent--un-exécutable)), `unit:true` (service systemd, Linux), `cloneFrom` (Hermes : réutilise les clés d'un profil). |
+| `list_templates` | Liste les modèles d'agents : les 11 intégrés et ceux de `<workspace>/templates/` — nom, description, classe, variables requises, serveurs MCP attendus. `create_agent {template}` les instancie ; `swarm-control templates` fait la même chose en CLI. |
+| `run_agent` | Fait travailler un agent. Avec `agentName` : il reprend sa conversation. Sans : agent **jetable**, un seul tour — `archetype` (`coder`, `explorer`, `verifier`…) lui donne la persona prête à l'emploi de son modèle, et `verify:true` fait relire le résultat par l'archétype `verifier` (permissions restreintes pour `explorer` et `verifier`). `background:true` rend la main tout de suite avec un `runId`. |
 | `run_agents_parallel` | Jusqu'à 10 agents en même temps, runners mélangés. |
 | `agent_control` | Suivre un run : `status`, `stream` (sortie en direct), `wait`, `kill`, `list`. |
 | `agent_start` / `agent_stop` | Allume / éteint un agent **résident**. |
-| `list_agents` | Tous les agents, leur session, leur run en cours, leur adresse s'ils sont résidents. |
+| `list_agents` | Tous les agents, leur classe (logo), leur session, leur run en cours, leur adresse s'ils sont résidents ; `details:true` ajoute modèle, serveurs MCP et taille du prompt. |
 | `get_agent_configs` | Fichiers d'un agent, **secrets masqués**. |
 | `update_agent_config` | Change modèle, serveurs MCP, variables, prompt. |
 | `delete_agent` | Supprime l'agent, sa session et son exécutable dédié (refusé s'il est en train de travailler). |
@@ -260,7 +284,7 @@ agent_start(name:"alice")
 ```
 
 Son serveur expose : `ask` (poser une question), `status`, `stop`, ainsi que `history`, `logs`, `config` et `session`
-pour l'inspecter.
+pour l'inspecter, et `memory_store` / `memory_search` / `memory_forget` pour sa mémoire (voir « Mémoire native »).
 
 Bon à savoir :
 
@@ -270,6 +294,23 @@ Bon à savoir :
 - Plusieurs serveurs sur la même machine ? Chacun prend un numéro (`swarm-control-1`, `-2`…, ou `--instance N`).
 
 Guide détaillé : [docs/RESIDENT-AGENTS.md](docs/RESIDENT-AGENTS.md).
+
+### Mémoire native
+
+Un agent résident garde des **souvenirs** en dehors de sa conversation — préférences, décisions,
+leçons — qu'il écrit et retrouve lui-même, par mots-clés. Rien à installer, pas de base de données :
+quand l'agent est résident, ces outils lui sont exposés comme le serveur MCP `memory` de sa configuration.
+
+| Outil | Rôle |
+|---|---|
+| `memory_store` | Mémorise un fait (texte court, mots-clés facultatifs) et rend son id. |
+| `memory_search` | Cherche par mots-clés (casse et accents ignorés), les plus pertinents d'abord : termes trouvés + récence. |
+| `memory_forget` | Oublie un souvenir par son id. |
+
+- Un souvenir par ligne JSON dans `<workspace>/bridge/memory/<runner>-<agent>.jsonl` (par exemple `claude-discord.jsonl`) ; le fichier a un plafond de taille, au-delà duquel il est compacté.
+- `memory_search {scope:"swarm"}` lit, en lecture seule, la mémoire des autres agents du même workspace.
+- Un texte ou un mot-clé qui contient une clé ou un jeton est refusé à l'écriture : aucun secret n'est mémorisé.
+- La mémoire ne remplace pas la session : celle-ci garde la conversation (reprise par le runner), la mémoire garde les faits.
 
 ---
 

@@ -17,13 +17,15 @@
 
 | Objet | Ce que c'est | Où |
 |---|---|---|
-| **Instance** | un process `swarm-control` : un serveur d'administration (10 outils, dont `agent_start`, `agent_stop`) | nom `swarm-control-N`, un port |
+| **Instance** | un process `swarm-control` : un serveur d'administration (11 outils, dont `agent_start`, `agent_stop`) | nom `swarm-control-N`, un port |
 | **Agent résident** | un agent *chargé en mémoire* : son propre serveur MCP, sa file de demandes, son fil de travail | nom `swarm-<agent>`, un port |
 | **Pair** | un autre agent résident, retrouvé par le registre LiteMCP | `%TEMP%/litemcp-registry/swarm-*.json` |
 
-Un exécutable = le même binaire sous un autre nom : `alice.exe` lancé sans argument sert l'agent
-`alice` (le nom du fichier sert d'identité — mode agent et pont détaillés au §4) ;
-`swarm-control` seul peut en héberger plusieurs.
+Un agent persistant a son **propre exécutable compilé** (`swarm-control build alice`, ou
+`create_agent {executable:true}`) : son nom et sa classe sont gravés dans le binaire, et lancé
+seul il ne sert que l'agent `alice` (mode agent et pont détaillés au §4). Un `swarm-control`
+copié ou renommé sous un nom d'agent est **refusé** depuis la 0.2.0 (code 2, message de
+migration) ; `swarm-control` seul peut en héberger plusieurs.
 
 ```
 client MCP ─▶ swarm-control-1 (admin :23080)             swarm-control-2 (admin :23081)
@@ -31,6 +33,11 @@ client MCP ─▶ swarm-control-1 (admin :23080)             swarm-control-2 (ad
                           └ swarm-bob    :23083
   le CLI de alice (claude -p) ──MCP──▶ swarm-bob / swarm-carol    (adresses lues dans le registre)
 ```
+
+Un **archétype** (`run_agent {archetype:"coder"}`) n'est pas un agent résident : c'est un tour
+jetable qui porte la persona d'un modèle — ni nom, ni mémoire, ni session gardée. On préfère un
+archétype pour une tâche ponctuelle, un agent nommé dès qu'il faut se souvenir, tourner en
+continu ou être joint par un pair.
 
 ## 2. Ce qui vit en mémoire, par agent résident
 
@@ -69,8 +76,8 @@ struct AgentHost {            // une entrée par agent résident, dans l'instanc
 3. **État par agent, plus de fichier global partagé** *(✅ construit — étape 1)* : `agents.json` et `process-registry.json`
    sont relus et réécrits en entier ; nos verrous (`static Mutex`) ne protègent qu'un process. On
    passe à `<ws>/bridge/state/<runner>-<agent>.json` (session + dernier run), écrit seulement par
-   le propriétaire. Les anciens fichiers sont encore lus en repli : héritage d'OverMind, qui n'est
-   plus supporté — ce repli sera retiré en 0.2.0.
+   le propriétaire. Les anciens fichiers ne sont plus lus : ce repli, héritage d'OverMind (qui n'est
+   plus supporté), a été retiré.
 4. **Routage** *(✅ construit)* : `run_agent("alice")` (et chaque tâche de `run_agents_parallel`)
    d'un agent qui a un hôte vivant est **transmis** à cet hôte par `ask` (un `POST /mcp` en `std`,
    module `peers`), même si l'hôte est l'instance qui reçoit l'appel : la file reste l'unique voie.
@@ -85,7 +92,7 @@ struct AgentHost {            // une entrée par agent résident, dans l'instanc
 
 Le même binaire, identifié par son **nom de fichier** ou par `--agent NAME`, ne sert qu'**un
 seul agent résident** : son serveur MCP (`swarm-<agent>`, outils listés au §5), sa
-file, sa session — et **pas de serveur d'administration** (aucun des 10 outils). `--resident` y
+file, sa session — et **pas de serveur d'administration** (aucun des 11 outils). `--resident` y
 est refusé (un agent par process) ; `--port N` fixe le port d'écoute (défaut : premier libre de
 23080..=23099), sur le même `--host` que le MCP.
 
@@ -208,8 +215,8 @@ outil.
 
 ## 7. Étapes testables (de bout en bout, faux CLI d'abord)
 
-1. ✅ **État par agent** + verrou de propriété (sans résidence encore) ; `agents.json` reste lu en
-   repli. Construit et testé : 16 acquéreurs simultanés → un seul gagnant (bail frais ou laissé
+1. ✅ **État par agent** + verrou de propriété (sans résidence encore) ; `agents.json` n'est plus
+   lu (repli retiré). Construit et testé : 16 acquéreurs simultanés → un seul gagnant (bail frais ou laissé
    par un mort), 2 instances sur un même workspace partagent la session et s'excluent mutuellement.
 2. ✅ **Agent résident** : serveur propre, file, `ask` / `status` / `stop`, annonce `swarm-<agent>`,
    `agent_start` / `agent_stop` / `create_agent resident:true` / `--resident`. Construit et testé

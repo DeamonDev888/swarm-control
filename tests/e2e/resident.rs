@@ -50,6 +50,7 @@ fn a_resident_agent_serves_ask_and_status_and_announces_itself() {
             "memory_forget",
             "memory_search",
             "memory_store",
+            "reload",
             "session",
             "status",
             "stop"

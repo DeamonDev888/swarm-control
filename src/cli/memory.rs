@@ -27,7 +27,14 @@ pub fn run(
     execute(&ws, agent, runner, action, rest, json)
 }
 
-fn execute(ws: &Path, agent: &str, runner: Option<Runner>, action: &str, rest: &[String], json: bool) -> Result<(), String> {
+fn execute(
+    ws: &Path,
+    agent: &str,
+    runner: Option<Runner>,
+    action: &str,
+    rest: &[String],
+    json: bool,
+) -> Result<(), String> {
     let out = perform(ws, agent, runner, action, rest)?;
     if json {
         output::json(&out.json);
@@ -46,7 +53,13 @@ struct Output {
 
 /// Valide la cible, résout le runner, applique l'action : le nom d'agent est vérifié avant
 /// tout accès disque.
-fn perform(ws: &Path, agent: &str, runner: Option<Runner>, action: &str, rest: &[String]) -> Result<Output, String> {
+fn perform(
+    ws: &Path,
+    agent: &str,
+    runner: Option<Runner>,
+    action: &str,
+    rest: &[String],
+) -> Result<Output, String> {
     target::validate(agent)?;
     let runner = resolve_runner(ws, agent, runner)?;
     match action {
@@ -112,7 +125,8 @@ fn parse(rest: &[String]) -> Result<Parsed, String> {
 }
 
 fn parse_limit(raw: &str) -> Result<usize, String> {
-    let n: usize = raw.trim().parse().map_err(|_| format!("--limit attend un nombre (reçu « {raw} »)"))?;
+    let n: usize =
+        raw.trim().parse().map_err(|_| format!("--limit attend un nombre (reçu « {raw} »)"))?;
     if (1..=memory::MAX_LIMIT).contains(&n) {
         Ok(n)
     } else {
@@ -138,12 +152,19 @@ fn search(ws: &Path, agent: &str, runner: Runner, rest: &[String]) -> Result<Out
         text.push_str(&line(hit, scope));
     }
     if hits.is_empty() {
-        text.push_str(&format!("aucun souvenir pour {agent} ne correspond à « {} ».\n", output::clip(&query, 80)));
+        text.push_str(&format!(
+            "aucun souvenir pour {agent} ne correspond à « {} ».\n",
+            output::clip(&query, 80)
+        ));
     } else {
         text.push_str(&format!(
             "\n{} souvenir(s) · {}\n",
             hits.len(),
-            if parsed.swarm { format!("essaim du workspace, sans {agent} (lecture seule)") } else { agent.to_string() }
+            if parsed.swarm {
+                format!("essaim du workspace, sans {agent} (lecture seule)")
+            } else {
+                agent.to_string()
+            }
         ));
     }
     let json = json!({
@@ -180,7 +201,9 @@ fn add(ws: &Path, agent: &str, runner: Runner, rest: &[String]) -> Result<Output
         return Err("memory add attend un texte : memory add \"<texte>\" [--tags a,b]".into());
     }
     if parsed.limit.is_some() || parsed.swarm {
-        return Err("memory add n'accepte pas -n ni --swarm (un souvenir est toujours le sien)".into());
+        return Err(
+            "memory add n'accepte pas -n ni --swarm (un souvenir est toujours le sien)".into()
+        );
     }
     let stored = memory::store(ws, runner.as_str(), agent, &text, &parsed.tags, "cli")?;
     let json = json!({
@@ -217,7 +240,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn ws(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("swarm-cli-memory-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("swarm-cli-memory-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -229,12 +253,22 @@ mod tests {
     #[test]
     fn add_search_forget_round_trip_in_text_and_json() {
         let ws = ws("aller-retour");
-        let added = add(&ws, "alice", Runner::Claude, &args(&["Le port est 23090", "--tags", "réseau, Port"])).unwrap();
+        let added = add(
+            &ws,
+            "alice",
+            Runner::Claude,
+            &args(&["Le port est 23090", "--tags", "réseau, Port"]),
+        )
+        .unwrap();
         let id = added.json["id"].as_str().unwrap().to_string();
         assert_eq!(added.json["agent"], json!("alice"));
         assert_eq!(added.json["runner"], json!("claude"));
         assert_eq!(added.json["tags"], json!(["réseau", "Port"]));
-        assert!(added.text.starts_with(&format!("mémorisé {id} · Le port est 23090")), "{}", added.text);
+        assert!(
+            added.text.starts_with(&format!("mémorisé {id} · Le port est 23090")),
+            "{}",
+            added.text
+        );
         // Écrit par la CLI, lu par le module (source `cli`).
         let line = std::fs::read_to_string(ws.join("bridge/memory/claude-alice.jsonl")).unwrap();
         assert!(line.contains("\"source\":\"cli\""), "{line}");
@@ -264,7 +298,10 @@ mod tests {
         assert_eq!(parsed.tags, ["a", "b"]);
         assert!(parsed.swarm);
         assert_eq!(parsed.limit, Some(3));
-        assert_eq!(parse(&args(&["--", "--pas-une-option"])).unwrap().positionals, ["--pas-une-option"]);
+        assert_eq!(
+            parse(&args(&["--", "--pas-une-option"])).unwrap().positionals,
+            ["--pas-une-option"]
+        );
         assert!(parse(&args(&["x", "--inconnu"])).is_err());
         assert!(parse(&args(&["-n", "abc"])).is_err());
         assert!(parse(&args(&["-n", "0"])).is_err());
@@ -277,12 +314,29 @@ mod tests {
         let ws = ws("usage");
         let err = perform(&ws, "alice", Some(Runner::Claude), "list", &[]).unwrap_err();
         assert!(err.contains("action memory inconnue"), "{err}");
-        assert!(search(&ws, "alice", Runner::Claude, &[]).unwrap_err().contains("attend une requête"));
-        assert!(add(&ws, "alice", Runner::Claude, &args(&["  "])).unwrap_err().contains("attend un texte"));
-        assert!(add(&ws, "alice", Runner::Claude, &args(&["x", "--swarm"])).unwrap_err().contains("--swarm"));
+        assert!(
+            search(&ws, "alice", Runner::Claude, &[]).unwrap_err().contains("attend une requête")
+        );
+        assert!(
+            add(&ws, "alice", Runner::Claude, &args(&["  "]))
+                .unwrap_err()
+                .contains("attend un texte")
+        );
+        assert!(
+            add(&ws, "alice", Runner::Claude, &args(&["x", "--swarm"]))
+                .unwrap_err()
+                .contains("--swarm")
+        );
         assert!(forget(&ws, "alice", Runner::Claude, &[]).unwrap_err().contains("attend un id"));
-        assert!(forget(&ws, "alice", Runner::Claude, &args(&["a", "b"])).unwrap_err().contains("attend un id"));
-        assert!(search(&ws, "../évasion", Runner::Claude, &args(&["x"])).is_err(), "nom validé");
+        assert!(
+            forget(&ws, "alice", Runner::Claude, &args(&["a", "b"]))
+                .unwrap_err()
+                .contains("attend un id")
+        );
+        assert!(
+            perform(&ws, "../évasion", Some(Runner::Claude), "search", &args(&["x"])).is_err(),
+            "nom validé"
+        );
         assert!(!ws.exists(), "rien n'a été créé");
         let _ = std::fs::remove_dir_all(&ws);
     }
@@ -290,7 +344,8 @@ mod tests {
     #[test]
     fn a_secret_is_refused_by_the_cli_as_by_the_tool() {
         let ws = ws("jeton");
-        let err = add(&ws, "alice", Runner::Claude, &args(&["API_KEY=abc123def456ghi789"])).unwrap_err();
+        let err =
+            add(&ws, "alice", Runner::Claude, &args(&["API_KEY=abc123def456ghi789"])).unwrap_err();
         assert!(err.starts_with("SECRET:"), "{err}");
         assert!(!ws.exists());
         let _ = std::fs::remove_dir_all(&ws);
@@ -299,11 +354,13 @@ mod tests {
     #[test]
     fn swarm_search_lists_the_neighbours_with_their_agent() {
         let ws = ws("essaim");
-        crate::memory::store(&ws, "hermes", "bob", "bob note que le port 23091 répond", &[], "cli").unwrap();
+        crate::memory::store(&ws, "hermes", "bob", "bob note que le port 23091 répond", &[], "cli")
+            .unwrap();
         add(&ws, "alice", Runner::Claude, &args(&["le port 23090"])).unwrap();
         let own = search(&ws, "alice", Runner::Claude, &args(&["port"])).unwrap();
         assert_eq!(own.json["results"].as_array().unwrap().len(), 1);
-        let swarm = search(&ws, "alice", Runner::Claude, &args(&["port", "--swarm", "-n", "5"])).unwrap();
+        let swarm =
+            search(&ws, "alice", Runner::Claude, &args(&["port", "--swarm", "-n", "5"])).unwrap();
         assert_eq!(swarm.json["scope"], json!("swarm"));
         assert_eq!(swarm.json["results"][0]["agent"], json!("bob"));
         assert!(swarm.text.contains("bob"), "{}", swarm.text);
@@ -320,7 +377,11 @@ mod tests {
         // Agent supprimé mais mémoire encore là : on la trouve.
         crate::memory::store(&ws, "antigravity", "alice", "souvenir", &[], "cli").unwrap();
         assert_eq!(resolve_runner(&ws, "alice", None), Ok(Runner::Antigravity));
-        assert_eq!(resolve_runner(&ws, "alice", Some(Runner::Claude)), Ok(Runner::Claude), "--runner garde la priorité");
+        assert_eq!(
+            resolve_runner(&ws, "alice", Some(Runner::Claude)),
+            Ok(Runner::Claude),
+            "--runner garde la priorité"
+        );
         let _ = std::fs::remove_dir_all(&ws);
     }
 }

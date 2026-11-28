@@ -6,6 +6,8 @@
 //! ```text
 //! swarm-control [--workspace DIR] agents
 //! discord ask "état du marché ?" --model sonnet --timeout-ms 600000
+//! discord --every 5m "résume la journée" --window 09:00-18:00
+//! discord memory search "port" -n 3 --swarm
 //! swarm-control run discord "résume la journée"
 //! ```
 //!
@@ -22,6 +24,8 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 3_600_000;
 /// Attente maximale acceptée par l'outil `ask` d'un agent (`timeoutMs`).
 pub const ASK_MAX_TIMEOUT_MS: u64 = 3_600_000;
 
+/// Options de la ligne de commande, partagées par toutes les commandes.
+#[derive(Debug)]
 pub struct Options {
     /// Port d'écoute ; `None` = premier port libre de 23080..=23099 (et, pour `schema`, une
     /// instance vivante).
@@ -43,6 +47,8 @@ pub struct Options {
     pub every: Option<String>,
     /// Fenêtre horaire de la tâche planifiée (`--window 09:00-18:00`, optionnelle).
     pub window: Option<String>,
+    /// Prompt positionnel de `serve`, celui de la tâche planifiée : admis avec `--every`.
+    pub prompt: Option<String>,
     /// Mode agent : pas de TUI, bannière puis attente.
     pub headless: bool,
     /// Journal de diagnostic sur stderr (`SWARM_DEBUG=1` fait de même).
@@ -70,6 +76,7 @@ impl Default for Options {
             bridge_dialect: None,
             every: None,
             window: None,
+            prompt: None,
             headless: false,
             debug: false,
             json: false,
@@ -81,6 +88,7 @@ impl Default for Options {
 }
 
 /// Commande demandée (`serve` excepté : il a sa variante dans [`Parsed`]).
+#[derive(Debug)]
 pub enum Command {
     /// `ask "<prompt>"` : un tour pour l'agent, son hôte ou un pair s'il tourne, sinon local.
     Ask { prompt: String },
@@ -104,6 +112,10 @@ pub enum Command {
     Runs,
     /// `build <agent>` : recompile le binaire dédié de l'agent (`--offline` : sans réseau).
     Build { agent: String, offline: bool },
+    /// `memory <action> [args…]` : la mémoire native de l'agent (`search`, `add`, `forget`).
+    Memory { action: String, rest: Vec<String> },
+    /// `reload` : relit à chaud les `.env` du workspace de l'agent résident.
+    Reload,
     /// `doctor` : diagnostics non destructifs.
     Doctor,
 }
@@ -123,6 +135,8 @@ impl Command {
             Command::Run { .. } => "run",
             Command::Runs => "runs",
             Command::Build { .. } => "build",
+            Command::Memory { .. } => "memory",
+            Command::Reload => "reload",
             Command::Doctor => "doctor",
         }
     }
@@ -137,10 +151,13 @@ impl Command {
                 | Command::History { .. }
                 | Command::Reset
                 | Command::Config { .. }
+                | Command::Memory { .. }
+                | Command::Reload
         )
     }
 }
 
+#[derive(Debug)]
 pub enum Parsed {
     /// `serve` (ou aucune commande) : l'instance ou l'agent résident, comme avant.
     Serve(Options),
@@ -163,6 +180,8 @@ enum Kind {
     Run,
     Runs,
     Build,
+    Memory,
+    Reload,
     Doctor,
 }
 
@@ -181,6 +200,8 @@ impl Kind {
             "run" => Kind::Run,
             "runs" => Kind::Runs,
             "build" => Kind::Build,
+            "memory" => Kind::Memory,
+            "reload" => Kind::Reload,
             "doctor" => Kind::Doctor,
             other => return Err(format!("commande inconnue: {other} (voir --help)")),
         })
@@ -195,6 +216,10 @@ struct CommandOptions {
     file: Option<String>,
     /// `build --offline` : `cargo build --offline`.
     offline: bool,
+    /// `memory add "<texte>" --tags a,b` : rendu à `memory.rs` comme `--tags a,b`.
+    tags: Option<String>,
+    /// `memory search "<requête>" --swarm` : rendu à `memory.rs` comme `--swarm`.
+    swarm: bool,
 }
 
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
@@ -243,6 +268,8 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
             "-n" => {
                 command_options.limit = Some(parse_count(&value(&mut args, "-n")?, "-n")? as usize)
             }
+            "--tags" => command_options.tags = Some(value(&mut args, "--tags")?),
+            "--swarm" => command_options.swarm = true,
             "--before" => {
                 command_options.before = Some(parse_before(&value(&mut args, "--before")?)?)
             }
@@ -252,20 +279,43 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, String> {
             other if other.starts_with('-') && other.len() > 1 => {
                 return Err(format!("option inconnue: {other} (voir --help)"));
             }
-            other if kind.is_none() => kind = Some(Kind::of(other)?),
+            // `--every` / `--window` n'ont de sens que pour `serve` : leur présence fige la
+            // commande, et le positionnel suivant est le prompt de la tÃ¢che planifiÃ©e.
+            other if kind.is_none() && options.every.is_none() && options.window.is_none() => {
+                kind = Some(Kind::of(other)?)
+            }
             other => positional.push(other.to_string()),
         }
     }
     match kind {
-        None => {
-            no_more(&positional, "serve")?;
-            Ok(Parsed::Serve(options))
-        }
-        Some(Kind::Serve) => {
-            no_more(&positional, "serve")?;
+        // `serve` (explicite ou non) ne prend un positionnel que pour une tâche planifiée.
+        None | Some(Kind::Serve) => {
+            options.prompt = serve_prompt(&options, &positional)?;
             Ok(Parsed::Serve(options))
         }
         Some(kind) => Ok(Parsed::Command(options, build(kind, &positional, command_options)?)),
+    }
+}
+
+/// Le positionnel de `serve` est le prompt de la tâche planifiée (`--every 5m "<prompt>"`) :
+/// admis exactement quand `--every` est posé, et un seul. Sans `--every`, `serve` ne prend aucun
+/// positionnel ; `--window` non plus n'a de sens sans tâche à fenêtrer.
+fn serve_prompt(options: &Options, positional: &[String]) -> Result<Option<String>, String> {
+    if options.every.is_none() {
+        if options.window.is_some() {
+            return Err("--window s'emploie avec --every : serve --every 5m \"<prompt>\" --window 09:00-18:00".into());
+        }
+        return match positional.first() {
+            Some(extra) => Err(format!(
+                "serve: argument inattendu « {extra} » (le prompt d'une tâche planifiée s'emploie avec --every)"
+            )),
+            None => Ok(None),
+        };
+    }
+    match positional {
+        [prompt] => Ok(Some(prompt.clone())),
+        [] => Err("serve --every attend un prompt : serve --every 5m \"<prompt>\"".into()),
+        [_, extra, ..] => Err(format!("serve: argument inattendu « {extra} »")),
     }
 }
 
@@ -274,7 +324,7 @@ fn build(
     positional: &[String],
     command_options: CommandOptions,
 ) -> Result<Command, String> {
-    let CommandOptions { limit, before, file, offline } = command_options;
+    let CommandOptions { limit, before, file, offline, tags, swarm } = command_options;
     Ok(match kind {
         Kind::Serve => unreachable!("serve est traité avant build"),
         Kind::Ask => Command::Ask { prompt: one(positional, "ask", "un prompt : ask \"…\"")? },
@@ -316,6 +366,21 @@ fn build(
         }
         Kind::Build => {
             Command::Build { agent: one(positional, "build", "un agent : build AGENT")?, offline }
+        }
+        Kind::Memory => {
+            // L'action d'abord, le reste (positionnels, puis options rendues sous leur forme
+            // d'option) à `memory.rs`, qui les accepte où qu'elles soient.
+            let [action, rest @ ..] = positional else {
+                return Err(
+                    "memory attend une action : memory search \"<requête>\" | add \"<texte>\" | forget <id>"
+                        .into(),
+                );
+            };
+            Command::Memory { action: action.clone(), rest: memory_rest(rest, limit, tags, swarm) }
+        }
+        Kind::Reload => {
+            no_more(positional, "reload")?;
+            Command::Reload
         }
         Kind::Doctor => {
             no_more(positional, "doctor")?;
@@ -378,6 +443,28 @@ fn one(positional: &[String], command: &str, what: &str) -> Result<String, Strin
         [] => Err(format!("{command} attend {what}")),
         [_, extra, ..] => Err(format!("{command}: argument inattendu « {extra} »")),
     }
+}
+
+/// Les arguments de `memory` après l'action : ses positionnels, puis les options reconnues
+/// par la ligne de commande globale (`-n N`, `--tags a,b`, `--swarm`), rendues à `memory.rs`
+/// sous leur forme d'option.
+fn memory_rest(
+    positional: &[String],
+    limit: Option<usize>,
+    tags: Option<String>,
+    swarm: bool,
+) -> Vec<String> {
+    let mut rest: Vec<String> = positional.to_vec();
+    if let Some(limit) = limit {
+        rest.extend(["-n".into(), limit.to_string()]);
+    }
+    if let Some(tags) = tags {
+        rest.extend(["--tags".into(), tags]);
+    }
+    if swarm {
+        rest.push("--swarm".into());
+    }
+    rest
 }
 
 #[cfg(test)]
@@ -547,13 +634,117 @@ mod tests {
     fn reads_the_bridge_dialect_and_the_schedule() {
         let o = serve(&["-b", "3011", "--bridge-dialect", "whatsapp"]);
         assert_eq!(o.bridge_dialect, Some(Dialect::Whatsapp));
-        let o = serve(&["--every", "5m", "--window", "09:00-18:00"]);
+        let o = serve(&["--every", "5m", "--window", "09:00-18:00", "résumé"]);
         assert_eq!(o.every.as_deref(), Some("5m"));
         assert_eq!(o.window.as_deref(), Some("09:00-18:00"));
+        assert_eq!(o.prompt.as_deref(), Some("résumé"));
         assert!(run(&["--bridge-dialect", "telegram"]).is_err());
         assert!(run(&["--bridge-dialect"]).is_err());
         assert!(run(&["--every"]).is_err());
         assert!(run(&["--window"]).is_err());
+    }
+
+    /// `serve --every 5m "<prompt>"` : le prompt positionnel est lu (avec `serve`, sans
+    /// commande — binaire compilé —, et après `--` quand il commence par un tiret).
+    #[test]
+    fn serve_every_prend_exactement_un_prompt_positionnel() {
+        let o = serve(&["serve", "--every", "5m", "résume la journée", "--window", "09:00-18:00"]);
+        assert_eq!(
+            (o.every.as_deref(), o.prompt.as_deref(), o.window.as_deref()),
+            (Some("5m"), Some("résume la journée"), Some("09:00-18:00"))
+        );
+        // Sans `serve` explicite, options avant ou après le prompt.
+        let o = serve(&["--agent", "discord", "--every", "1h30", "-w", "ws", "le point"]);
+        assert_eq!((o.prompt.as_deref(), o.every.as_deref()), (Some("le point"), Some("1h30")));
+        assert_eq!(o.workspace.unwrap().to_str(), Some("ws"));
+        let o = serve(&["serve", "--every", "30s", "--", "-prompt"]);
+        assert_eq!(o.prompt.as_deref(), Some("-prompt"));
+        // Rien non plus sans `--every` : `serve` seul n'a pas de prompt.
+        assert_eq!(serve(&["serve"]).prompt, None);
+    }
+
+    /// `--every` sans prompt, ou avec deux positionnels : refusés.
+    #[test]
+    fn serve_every_sans_prompt_est_refuse() {
+        let err = run(&["serve", "--every", "5m"]).unwrap_err();
+        assert!(err.contains("--every attend un prompt"), "{err}");
+        assert!(
+            run(&["--every", "5m", "--window", "09:00-18:00"]).is_err(),
+            "la fenêtre ne remplace pas le prompt"
+        );
+        let err = run(&["serve", "--every", "5m", "un", "deux"]).unwrap_err();
+        assert!(err.contains("argument inattendu « deux »"), "{err}");
+    }
+
+    /// Un prompt sans `--every` : refusé (il n'a nulle part où aller) ; `--window` sans
+    /// `--every` aussi.
+    #[test]
+    fn un_prompt_sans_every_est_refuse() {
+        let err = run(&["serve", "résume"]).unwrap_err();
+        assert!(err.contains("argument inattendu « résume »"), "{err}");
+        assert!(err.contains("--every"), "{err}");
+        assert!(run(&["--agent", "discord", "résume"]).is_err());
+        let err = run(&["serve", "--window", "09:00-18:00"]).unwrap_err();
+        assert!(err.contains("--window s'emploie avec --every"), "{err}");
+    }
+
+    /// `memory <action> [args…]` : l'action, puis un `rest` où `-n N`, `--tags a,b` et
+    /// `--swarm` arrivent sous leur forme d'option, où qu'ils soient sur la ligne.
+    #[test]
+    fn memory_prend_une_action_et_rend_ses_options_a_memory_rs() {
+        match command(&["memory", "search", "x", "-n", "3", "--swarm"]) {
+            Command::Memory { action, rest } => {
+                assert_eq!(action, "search");
+                assert_eq!(rest, ["x", "-n", "3", "--swarm"]);
+            }
+            _ => panic!("memory attendu"),
+        }
+        match command(&["memory", "add", "texte", "--tags", "a,b"]) {
+            Command::Memory { action, rest } => {
+                assert_eq!(action, "add");
+                assert_eq!(rest, ["texte", "--tags", "a,b"]);
+            }
+            _ => panic!("memory attendu"),
+        }
+        match command(&["memory", "forget", "id"]) {
+            Command::Memory { action, rest } => {
+                assert_eq!(action, "forget");
+                assert_eq!(rest, ["id"]);
+            }
+            _ => panic!("memory attendu"),
+        }
+        // Options globales et de mémoire avant l'action, positionnels en plusieurs mots.
+        match run(&["--json", "memory", "-n", "2", "--tags", "c", "search", "un mot", "--swarm"]) {
+            Ok(Parsed::Command(o, Command::Memory { action, rest })) => {
+                assert!(o.json);
+                assert_eq!(action, "search");
+                assert_eq!(rest, ["un mot", "-n", "2", "--tags", "c", "--swarm"]);
+            }
+            _ => panic!("memory attendu"),
+        }
+        assert!(run(&["memory"]).is_err(), "une action est requise");
+        assert!(run(&["memory", "--swarm"]).is_err(), "une option ne fait pas une action");
+        assert!(run(&["memory", "search", "x", "-n", "0"]).is_err(), "-n : entier ≥ 1");
+        assert!(run(&["memory", "search", "x", "--tags"]).is_err(), "--tags attend une valeur");
+    }
+
+    /// `memory` et `reload` visent un agent : sans `--agent` (ni binaire nommé), refusés.
+    #[test]
+    fn memory_et_reload_exigent_un_agent() {
+        assert!(Command::Memory { action: "search".into(), rest: Vec::new() }.needs_agent());
+        assert!(Command::Reload.needs_agent());
+    }
+
+    /// `reload` ne prend aucun positionnel ; les options globales restent admises.
+    #[test]
+    fn reload_ne_prend_aucun_argument() {
+        assert!(matches!(command(&["reload"]), Command::Reload));
+        assert!(matches!(
+            run(&["reload", "--json", "--agent", "bob"]),
+            Ok(Parsed::Command(_, Command::Reload))
+        ));
+        let err = run(&["reload", "x"]).unwrap_err();
+        assert!(err.contains("reload: argument inattendu « x »"), "{err}");
     }
 
     #[test]

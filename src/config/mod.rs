@@ -20,5 +20,5 @@ pub use env::{app_var, var};
 pub use hermes_home::native_hermes_home;
 pub use interpolate::interpolate_json;
 pub use paths::home_dir;
-pub use state::{get, init, workspace_for};
+pub use state::{get, init, reload_env, workspace_for};
 pub use timeouts::default_timeout;

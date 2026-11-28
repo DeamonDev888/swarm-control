@@ -17,8 +17,11 @@ const DESCRIPTION: &str = "Crée un agent persistant. Claude : profil agents/<no
     agents/<nom>/.antigravity (CLI agy). Le prompt définit sa persona ; avec template, la persona \
     du modèle est utilisée (prompt la remplace) et ses variables requises sont vérifiées — voir \
     list_templates. resident:true le rend aussitôt résident (serveur MCP propre, file de \
-    demandes). executable:true copie le binaire courant dans <workspace>/bin/<nom> ; unit:true \
-    (Linux) écrit en plus une unit systemd --headless (écrite, non activée).";
+    demandes). executable:true génère un crate sous <workspace>/agents/<nom>/build/ et lance \
+    cargo build --release en arrière-plan (journal : <workspace>/logs/build-<nom>.log) ; le \
+    binaire arrive dans <workspace>/bin/<nom>. Sans cargo : erreur claire avec le lien rustup \
+    (https://rustup.rs), l'agent reste créé. unit:true (Linux) écrit en plus une unit systemd \
+    --headless (écrite, non activée).";
 
 const LIST_DESCRIPTION: &str = "Liste les modèles d'agents : intégrés (assets/templates/) et \
     surcharges du workspace (<workspace>/templates/) — nom, description, classe, variables \
@@ -294,8 +297,10 @@ fn install_binary(
         build["status"] = json!("skipped");
         return Ok(build);
     }
-    compile::spawn_build(ws, name, compile::BuildOptions::default())?;
+    let started = compile::spawn_build(ws, name, compile::BuildOptions::default())?;
     build["status"] = json!("building");
+    // Le build est un run suivi : `agent_control status|list|kill` l'atteint par son id.
+    build["runId"] = json!(started.run_id);
     Ok(build)
 }
 
@@ -312,7 +317,7 @@ fn write_service(ws: &Path, name: &str, exe: &Path) -> Result<PathBuf, ToolError
 
 /// L'agent est créé quoi qu'il arrive : un échec de résidence est signalé, pas fatal.
 fn add_residency(out: &mut serde_json::Value, ws: &Path, runner: Runner, name: &str) {
-    match residents::start(ws, runner, name) {
+    match residents::start(ws, runner, name, None) {
         Ok(info) => out["resident"] = info.to_json(),
         Err(e) => out["residentError"] = json!(e),
     }

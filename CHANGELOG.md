@@ -10,19 +10,38 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 ### Ajouté
 
 - **Modèles d'agents** intégrés (`assets/templates/`) : `create_agent {template}` pour les 11
-  agents du README, `swarm-control templates` en CLI, `list_templates` en MCP ; champ `class`
-  publié par `status`, `list_agents` et `/status` du pont (le logo ne se devine plus sur le nom).
-- **Mémoire native** par agent, sans base de données : outils MCP `memory_store` /
-  `memory_search` / `memory_forget`, CLI `<agent> memory`, filtrage des jetons à l'écriture.
+  agents du README, `swarm-control templates` en CLI, `list_templates` en MCP — l'instance passe
+  de 10 à **11 outils** ; champ `class` publié par `status`, `list_agents` et `/status` du pont
+  (le logo ne se devine plus sur le nom).
+- **Mémoire native** par agent résident, sans base de données : outils MCP `memory_store` /
+  `memory_search` / `memory_forget` (un souvenir par ligne dans
+  `bridge/memory/<runner>-<agent>.jsonl`), portée `swarm` en lecture seule, filtrage des jetons à
+  l'écriture.
 - **Archétypes de l'essaim** : `run_agent {archetype}` (persona prête à l'emploi), permissions
-  restreintes pour `explorer` et `verifier`.
+  restreintes pour `explorer` et `verifier` ; `verify:true` fait relire le résultat par
+  l'archétype `verifier` (champ `verified` ; sans `background:true`).
 - **Dialectes du pont** : `--bridge-dialect discord|whatsapp|raw` ; `POST /send {async:true}` →
   `202 {turnId}` puis `GET /turn/<id>`.
 - **Tâches planifiées** : `schedule` dans la définition d'un résident (même file que les
-  demandes, `from: "schedule"`, pas de rafale après une veille) ; les drapeaux `--every` /
-  `--window` sont parsés mais pas encore branchés.
-- **Compilation native des agents persistants** : `swarm-control build <agent>`, entrée de lib
-  `serve_compiled`, crate généré sans secret ; sans `cargo`, l'agent est créé et l'erreur le dit.
+  demandes, `from: "schedule"`, pas de rafale après une veille) ; `--every <durée> "<prompt>"`
+  et `--window HH:MM-HH:MM` font de même depuis la ligne de commande (mode agent), en prime
+  sur la tâche de la définition — un intervalle et une fenêtre, pas un cron complet.
+- **Compilation native des agents persistants** : `create_agent {executable:true}` génère le
+  crate de l'agent sous `agents/<nom>/build/` et lance `cargo build --release` en arrière-plan
+  (journal `logs/build-<nom>.log`), binaire dans `bin/<nom>` ; `swarm-control build <agent>`
+  recompile au premier plan ; entrée de lib `serve_compiled`, crate généré sans secret. Sans
+  `cargo` : erreur claire avec le lien rustup, l'agent est créé et reste utilisable depuis
+  l'instance.
+- **Mémoire et rechargement en CLI** : `swarm-control memory search|add|forget` (même fichier
+  que les outils `memory_*`), et `swarm-control reload <agent>` / outil MCP `reload` du
+  résident : le `.env` du workspace et `SWARM_EXTERNAL_ENV_PATH` sont relus à chaud dès que
+  leur date de modification change, l'environnement système gardant la priorité.
+- **Suivi de la compilation** : `create_agent {executable:true}` rend `build.runId` ; le build
+  est un run `build:<agent>` visible par `agent_control status|list|kill`, sans bail sur
+  l'agent ; `status` publie `rebuildNeeded` (binaire compilé avec une autre version) ;
+  `swarm-control build` régénère le crate avant de compiler ; icône Windows de la classe
+  (`resources/icon.ico`, 16/32/48 px) posée dans les ressources du binaire ; `doctor` rend
+  une ligne « compilation d'agents » (cargo, cible de l'hôte, dossier partagé).
 - **Anti-régression** : contrats publics figés dans `tests/golden/` (outils, aide, bannière,
   clés, erreurs MCP, variables d'environnement), fichiers témoins de la 0.1.2 dans
   `tests/fixtures/`, garde-fou de publication écrit (`SWARM_ALLOW_PUBLISH`, agents x / google —
@@ -30,8 +49,11 @@ Le workflow de release extrait la section `## [X.Y.Z]` correspondant au tag pour
 
 ### Modifié
 
-- ⚠ **Rupture** : un binaire `swarm-control` renommé sous un nom d'agent n'est plus servi ni
-  démarré (code 2, message de migration) ; `--agent NAME` reste disponible pour le développement.
+- ⚠ **Rupture** : un binaire `swarm-control` copié ou renommé sous un nom d'agent n'est plus
+  servi ni démarré (code 2, message de migration) — un agent persistant se lance par son binaire
+  **compilé** (voir « Compilation native des agents persistants »). `--agent NAME` reste
+  disponible pour le développement et les tests ; un binaire compilé le **refuse** (code 2), il ne
+  sert que son agent.
 
 ### Retiré
 

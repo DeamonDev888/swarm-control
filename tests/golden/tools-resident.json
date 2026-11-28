@@ -200,6 +200,15 @@
     "name": "memory_store"
   },
   {
+    "description": "Relit à chaud les .env du workspace et EXTERNAL_ENV_PATH (jetons, modèle, variables de l'agent…) : pris en compte dès le prochain tour, sans redémarrer. L'environnement système garde la priorité. reloaded vaut false si rien n'a changé.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "name": "reload"
+  },
+  {
     "description": "Gère la session de cet agent : show (la session reprise), reset (l'oublie — le prochain tour repart à neuf), set (force l'identifiant de session). Un reset demandé pendant un tour est appliqué à la fin de ce tour.",
     "inputSchema": {
       "additionalProperties": false,

@@ -9,7 +9,7 @@ pub fn anthropic_token() -> Option<String> {
     }
     let mut keys: Vec<String> = std::env::vars()
         .map(|(k, _)| k)
-        .chain(config::get().dotenv.keys().cloned())
+        .chain(config::get().dotenv().keys().cloned())
         .filter(|k| is_numbered_token(k))
         .collect();
     keys.sort();

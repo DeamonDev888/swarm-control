@@ -58,6 +58,21 @@ pub fn begin(
     Ok(run)
 }
 
+/// Ouvre le run d'une **compilation d'agent** (`swarm-control build`, `create_agent`) :
+/// même table que les tours, donc visible par `agent_control status|list|kill`, sous la
+/// clé `build:<agent>`. Pas de bail : compiler ne réserve pas l'agent, qui peut servir
+/// pendant ce temps. Pas de fichier d'état non plus (voir `finish_quiet`).
+pub fn begin_build(agent: &str, workspace: &Path) -> Arc<LiveRun> {
+    let n = RUN_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let now = now_ms();
+    let run =
+        Arc::new(LiveRun::new(format!("build-{now}-{n}"), "build", Some(agent), workspace, now));
+    let mut guard = live();
+    let map = guard.get_or_insert_with(HashMap::new);
+    map.insert(key("build", agent), Arc::clone(&run));
+    run
+}
+
 fn busy_here(agent: Option<&str>, runner: &str, run_id: &str) -> String {
     format!(
         "AGENT_BUSY: l'agent '{}' ({runner}) a déjà un run en cours ({run_id}). \

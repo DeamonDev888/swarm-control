@@ -72,6 +72,7 @@ fn the_agent_flag_serves_the_agent_alone() {
             "memory_forget",
             "memory_search",
             "memory_store",
+            "reload",
             "session",
             "status",
             "stop"

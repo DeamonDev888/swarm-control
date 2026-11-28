@@ -3,6 +3,7 @@ swarm-control <version> — agents persistants (Claude Code, Hermes, Antigravity
 USAGE (instance) : swarm-control [--port N] [--host H] [--workspace DIR] [--instance N] [--resident AGENT[,AGENT…]]
                    | swarm-control <commande>
 USAGE (agent)    : swarm-control --agent AGENT [--port N] [--bridge N] [--host H] [--workspace DIR]
+                   [--every DURÉE "<prompt>" [--window HH:MM-HH:MM]]
                    (développement et tests) ou le binaire compilé de l'agent (`discord`,
                    `discord.exe` : create_agent {executable:true} ou `build <agent>`)
                    | discord <commande>
@@ -18,6 +19,9 @@ Commandes d'agent (binaire compilé ou --agent) :
   config [--file NOM]  fichiers de l'agent, secrets masqués (filtre par sous-chaîne)
   schema <outil>       schéma d'entrée d'un outil servi par un serveur qui tourne
                        (`--port N`, le serveur de l'agent, ou une instance vivante)
+  memory search "…"    mémoire native : search [-n N] [--swarm] · add [--tags a,b] ·
+                       forget <id> (le même fichier que les outils memory_*)
+  reload               relit à chaud les .env du workspace (hébergé ici, ou pair vivant)
 
 Commandes d'instance :
   agents               agents du workspace et leur résidence
@@ -39,6 +43,10 @@ Commandes d'instance :
 --runner R            claude | hermes | antigravity (si l'agent existe sous plusieurs)
 --model M             modèle imposé au tour (`ask`, `run`)
 --timeout-ms MS       attente maximale d'un tour (défaut 3600000)
+--every DURÉE        tâche planifiée de l'agent (mode agent) : un tour "<prompt>" (positionnel
+                      de serve) toutes les DURÉE (30s, 5m, 1h30), dans la même file que les
+                      demandes ; prime sur le schedule de la définition de l'agent
+--window HH:MM-HH:MM  fenêtre horaire locale de la tâche planifiée (ex. 09:00-18:00)
 --offline             build : `cargo build --offline` (registre local déjà complet)
 --json                sortie JSON brute au lieu du résumé lisible
 --debug               une ligne par requête MCP, commande lancée (secrets masqués),

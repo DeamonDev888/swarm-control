@@ -31,6 +31,6 @@ fn handle(a: Args) -> ToolResult {
     let ws = config::workspace_for(a.config.as_deref());
     let runner =
         agents::resolve(&ws, &a.name, opt_runner(&a.runner)?).map_err(ToolError::invalid_input)?;
-    let info = residents::start(&ws, runner, &a.name).map_err(ToolError::invalid_input)?;
+    let info = residents::start(&ws, runner, &a.name, None).map_err(ToolError::invalid_input)?;
     Ok(info.to_json())
 }

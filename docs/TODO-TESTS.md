@@ -6,16 +6,17 @@ modules entiers sans test (`binaires`, `store`) ou presque (`sessions`, `routing
 `instance`, `server`, `config`). Plan et feuille de route : [PLAN.md](PLAN.md) ·
 [TODO.md](TODO.md).*
 
-## État au 2026-11-27, fin de journée
+## État au 2026-11-28
 
-Légende : `[ ]` à faire · `[ ] 🟡` **écrit dans l'arbre, à vérifier** · `[x]` vérifié vert.
+Légende : `[ ]` à faire · `[ ] 🟡` **écrit dans l'arbre, vérifié vert globalement, à cocher item par
+item** · `[x]` vérifié vert.
 
-Le travail de l'agent zwork avance, mais rien n'est commité et **l'arbre ne compile pas**
-(`cargo test --all-features` : 5 erreurs, dont `executable::install` introuvable,
-`split_paths`, valeurs déplacées `log` et `agent`). Aucun test ne peut donc être déclaré vert :
-ce qui existe est marqué 🟡. Les références golden (`tests/golden/*.json|txt`) ne sont pas encore
-générées (`SWARM_BLESS=1` à lancer une fois que ça compile) ; `tests/e2e/compiled.rs`,
-`tools_merge.rs` et `publish_guard.rs` sont créés mais vides.
+L'arbre compile de nouveau. Mesuré le 2026-11-28 : `cargo test --all-features` → **558 tests de la
+bibliothèque + 81 tests e2e, 0 échec** (1 + 2 tests `#[ignore]` : vraie compilation, lente) ;
+`cargo fmt --check` et `cargo clippy --all-targets --all-features -- -D warnings` propres. Les
+références golden existent dans `tests/golden/`. Rien n'est commité : zwork travaille encore dans
+l'arbre. Les 🟡 passent en `[x]` dès que le travail est commité et qu'on a relu chaque item contre
+son test ; `tests/e2e/tools_merge.rs` et `publish_guard.rs` restent à remplir.
 
 ## Règles
 
